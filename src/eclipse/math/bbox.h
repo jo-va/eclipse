@@ -29,26 +29,31 @@ public:
         pmax = max(p1, max(p2, p3));
     }
 
-    __forceinline BBox& merge(const BBox& o)
+    inline BBox& merge(const BBox& o)
     {
         pmin = min(pmin, o.pmin);
         pmax = max(pmax, o.pmax);
         return *this;
     }
 
-    __forceinline BBox& merge(const Vec3& p)
+    inline BBox& merge(const Vec3& p)
     {
         pmin = min(pmin, p);
         pmax = max(pmax, p);
         return *this;
     }
 
-    __forceinline Vec3 get_centroid()
+    inline Vec3 get_centroid()
     {
         return (pmin + pmax) * 0.5f;
     }
 
     Vec3 pmin, pmax;
 };
+
+inline BBox merge(const BBox& b1, const BBox& b2)
+{
+    return BBox(min(b1.pmin, b2.pmin), max(b1.pmax, b2.pmax));
+}
 
 } // namespace eclipse

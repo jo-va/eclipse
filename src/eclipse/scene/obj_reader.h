@@ -58,6 +58,8 @@ private:
     void parse(Resource* res);
     void parse_materials(Resource* res);
 
+    void create_default_mesh_instances();
+    void process_materials();
     OBJMaterial* default_material();
 
     std::vector<build::Triangle*> parse_face(const std::vector<std::string>& tokens, size_t rel_vertex_offset,

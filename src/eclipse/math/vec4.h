@@ -9,23 +9,23 @@ namespace eclipse {
 class Vec4
 {
 public:
-    __forceinline Vec4(float x = 0.0f, float y = 0.0f, float z = 0.0f, float w = 0.0f)
+    inline Vec4(float x = 0.0f, float y = 0.0f, float z = 0.0f, float w = 0.0f)
         : x(x), y(y), z(z), w(w)
     {
     }
 
-    __forceinline Vec4(const Vec4& o)
+    inline Vec4(const Vec4& o)
         : x(o.x), y(o.y), z(o.z), w(o.w)
     {
     }
 
-    __forceinline Vec4(const Vec3& o)
-        : x(o.x), y(o.y), z(o.z), w(0.0f)
+    inline Vec4(const Vec3& o, float w)
+        : x(o.x), y(o.y), z(o.z), w(w)
     {
     }
 
-    __forceinline const float& operator[](const size_t axis) const { return (&x)[axis]; }
-    __forceinline       float& operator[](const size_t axis)       { return (&x)[axis]; }
+    inline const float& operator[](const size_t axis) const { return (&x)[axis]; }
+    inline       float& operator[](const size_t axis)       { return (&x)[axis]; }
 
     float x, y, z, w;
 };

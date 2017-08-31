@@ -4,6 +4,9 @@
 
 namespace eclipse { namespace build {
 
+constexpr char SceneDiffuseMaterialName[] = "scene_diffuse_material";
+constexpr char SceneEmissiveMaterialName[] = "scene_emissive_material";
+
 class Compiler
 {
 public:

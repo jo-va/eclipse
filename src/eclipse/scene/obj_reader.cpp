@@ -1,10 +1,12 @@
 #include "eclipse/scene/obj_reader.h"
 #include "eclipse/scene/resource.h"
 #include "eclipse/scene/compiler/input_scene_types.h"
+#include "eclipse/scene/compiler/compiler.h"
 #include "eclipse/scene/material/bxdf.h"
 #include "eclipse/scene/material/node.h"
 #include "eclipse/math/vec2.h"
 #include "eclipse/math/vec3.h"
+#include "eclipse/math/transform.h"
 #include "eclipse/util/logger.h"
 
 #include <cstdint>
@@ -105,6 +107,11 @@ Scene* OBJReader::read(Resource* scene)
 
     parse(scene);
 
+    if (m_input_scene->mesh_instances.empty())
+        create_default_mesh_instances();
+
+    process_materials();
+
     return new Scene();
 }
 
@@ -124,6 +131,79 @@ std::string OBJReader::get_call_stack()
     for (auto it = m_call_stack.rbegin(); it != m_call_stack.rend(); ++it)
         msg += *it + "\n";
     return msg;
+}
+
+// Generate a mesh instance with an identity transformation for each defined mesh
+void OBJReader::create_default_mesh_instances()
+{
+    for (size_t i = 0; i < m_input_scene->meshes.size(); ++i)
+    {
+        build::Mesh* mesh = m_input_scene->meshes[i];
+
+        build::MeshInstance* inst = new build::MeshInstance();
+        inst->mesh_index = uint32_t(i);
+        inst->transform = Transform();
+        inst->bbox = mesh->get_bbox();
+        inst->centroid = mesh->get_bbox().get_centroid();
+
+        m_input_scene->mesh_instances.push_back(inst);
+    }
+}
+
+// Generate scene materials for material entries that are in use and update
+// the material indices for all parsed primitives
+void OBJReader::process_materials()
+{
+    std::map<int, int> obj_mat_to_scene_mat;
+    std::vector<build::Material*> pruned_materials;
+    size_t pruned = 0;
+
+    for (size_t obj_mat_idx = 0; obj_mat_idx < m_materials.size(); ++obj_mat_idx)
+    {
+        OBJMaterial* obj_mat = m_materials[obj_mat_idx];
+
+        // whitelist scene materials
+        if (obj_mat->name == std::string(build::SceneDiffuseMaterialName) ||
+            obj_mat->name == std::string(build::SceneEmissiveMaterialName))
+            obj_mat->used = true;
+
+        // Prune unused materials
+        if (!obj_mat->used)
+        {
+            LOG_INFO("Skipping unused material ", obj_mat->name);
+            build::Material* pruned_mat = new build::Material();
+            pruned_mat->name = obj_mat->name;
+            pruned_mat->expression = obj_mat->get_expression();
+            pruned_mat->resource = obj_mat->resource;
+            pruned_materials.push_back(pruned_mat);
+
+            ++pruned;
+            continue;
+        }
+
+        build::Material* mat = new build::Material();
+        mat->name = obj_mat->name;
+        mat->expression = obj_mat->get_expression();
+        mat->resource = obj_mat->resource;
+        mat->used = true;
+        m_input_scene->materials.push_back(mat);
+
+        obj_mat_to_scene_mat[obj_mat_idx] = m_input_scene->materials.size() - 1;
+    }
+
+    // For each primitive, map obj material indices to the generated materials
+    for (auto& mesh : m_input_scene->meshes)
+        for (auto& tri : mesh->triangles)
+            tri->material_index = obj_mat_to_scene_mat[tri->material_index];
+
+    // Append pruned materials at the end of the list as they may be
+    // reference by material expressions
+    m_input_scene->materials.insert(m_input_scene->materials.end(),
+                                    pruned_materials.begin(),
+                                    pruned_materials.end());
+
+    if (pruned > 0)
+        LOG_INFO("Pruned ", pruned, " unused materials");
 }
 
 // Create and select a default material for surfaces not using one
@@ -590,7 +670,7 @@ build::MeshInstance* OBJReader::parse_mesh_instance(const std::vector<std::strin
 
     Vec3 translation;
     Vec3 rotation;
-    Vec3 scale;
+    Vec3 scaling;
 
     // Parse translation
     for (size_t i = 2; i < 5; ++i)
@@ -602,19 +682,23 @@ build::MeshInstance* OBJReader::parse_mesh_instance(const std::vector<std::strin
 
     // Parse scale
     for (size_t i = 8; i < 11; ++i)
-        scale[i - 8] = std::stof(tokens[i]);
+        scaling[i - 8] = std::stof(tokens[i]);
 
     // Generate final matrix: M = T * R * S
+    Transform scale_xfm = scale(scaling);
+    Transform trans_xfm = translate(translation);
+    Transform rot_xfm = rotate_z(rotation[2]) * rotate_y(rotation[1]) * rotate_x(rotation[0]);
+    Transform total_xfm = trans_xfm * rot_xfm * scale_xfm;
 
-    // Transform mesh bbox and recalculate a new AABB for the mewsh instance
-    BBox mesh_bbox = m_input_scene->meshes[mesh_index]->bbox;
-
-    BBox inst_bbox;
+    // Get mesh bbox and recalculate a new BBox for the mesh instance
+    BBox mesh_bbox = m_input_scene->meshes[mesh_index]->get_bbox();
+    BBox inst_bbox = transform_bbox(total_xfm, mesh_bbox);
 
     build::MeshInstance* instance = new build::MeshInstance();
     instance->mesh_index = uint32_t(mesh_index);
     instance->bbox = inst_bbox;
     instance->centroid = inst_bbox.get_centroid();
+    instance->transform = total_xfm;
 
     return instance;
 }

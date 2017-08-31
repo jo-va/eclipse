@@ -3,8 +3,9 @@
 #include "eclipse/math/bbox.h"
 #include "eclipse/math/vec2.h"
 #include "eclipse/math/vec3.h"
-#include "eclipse/math/mat4.h"
 #include "eclipse/math/bbox.h"
+#include "eclipse/math/transform.h"
+#include "eclipse/scene/resource.h"
 
 #include <vector>
 #include <string>
@@ -55,7 +56,7 @@ struct Mesh
 struct MeshInstance
 {
     uint32_t mesh_index;
-    Mat4 transform;
+    Transform transform;
 
     BBox bbox;
     Vec3 centroid;
@@ -68,7 +69,7 @@ struct Material
 {
     std::string name;
     std::string expression;
-    std::string rel_path;
+    Resource* resource;
     bool used;
 
     Material() : used(false) { }
