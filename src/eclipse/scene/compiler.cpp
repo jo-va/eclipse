@@ -1,4 +1,4 @@
-#include "eclipse/scene/compiler/compiler.h"
+#include "eclipse/scene/compiler.h"
 
 namespace eclipse { namespace build {
 

@@ -4,11 +4,11 @@
 
 namespace eclipse {
 
-class Timer
+class StopWatch
 {
 public:
-    Timer();
-    ~Timer();
+    StopWatch();
+    ~StopWatch();
 
     void start();
     void stop();

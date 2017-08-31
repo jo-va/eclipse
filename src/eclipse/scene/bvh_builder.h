@@ -9,7 +9,7 @@
 #include <vector>
 #include <future>
 
-namespace eclipse { namespace build {
+namespace eclipse { namespace bvh {
 
 struct Node
 {
@@ -282,4 +282,4 @@ public:
     }
 };
 
-} } // namespace eclipse::build
+} } // namespace eclipse::bvh

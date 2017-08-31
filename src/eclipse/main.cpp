@@ -1,9 +1,9 @@
 #include "eclipse/renderer/window.h"
 #include "eclipse/renderer/drawing.h"
-#include "eclipse/util/timer.h"
+#include "eclipse/util/stop_watch.h"
 #include "eclipse/util/logger.h"
 #include "eclipse/scene/resource.h"
-#include "eclipse/scene/obj_reader.h"
+#include "eclipse/scene/obj_loader.h"
 
 #include <iostream>
 #include <sstream>
@@ -20,16 +20,16 @@ namespace {
 
 int main(int argc, char* argv[])
 {
-    (void)argc;
-    (void)argv;
-
-    if (argc < 2)
-        return 0;
-
-    Resource scene_res(argv[1]);//"https://raw.githubusercontent.com/achilleasa/polaris-example-scenes/master/diamonds/diamonds.obj");
-    OBJReader reader;
-    Scene* scene = reader.read(&scene_res);
-    delete scene;
+    if (argc > 1)
+    {
+        std::shared_ptr<Resource> r1 = std::make_shared<Resource>(argv[1]);
+        std::unique_ptr<raw::Scene> s1 = obj::load(r1);
+    }
+    if (argc > 2)
+    {
+        std::shared_ptr<Resource> r2 = std::make_shared<Resource>(argv[2]);
+        std::unique_ptr<raw::Scene> s2 = obj::load(r2);
+    }
 
     Window window(g_width, g_height, "Pathtracer");
 
@@ -54,7 +54,7 @@ int main(int argc, char* argv[])
     int num_frames = 0;
     int last_num_frames = 0;
     std::stringstream ss;
-    Timer timer;
+    StopWatch timer;
     timer.start();
 
     while (!window.should_close())

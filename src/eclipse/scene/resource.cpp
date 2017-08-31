@@ -5,6 +5,7 @@
 #include <string>
 #include <cstring>
 #include <fstream>
+#include <memory>
 #include <sys/stat.h>
 #include <sys/types.h>
 
@@ -88,7 +89,7 @@ bool create_dir(const std::string& dir)
     return false;
 }
 
-Resource::Resource(const std::string& uri, const Resource* rel_to)
+Resource::Resource(const std::string& uri, std::shared_ptr<const Resource> rel_to)
 {
     m_is_remote = (uri.find("http://")  != std::string::npos) ||
                   (uri.find("https://") != std::string::npos) ||

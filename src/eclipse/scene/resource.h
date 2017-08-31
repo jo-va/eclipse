@@ -2,13 +2,14 @@
 
 #include <string>
 #include <fstream>
+#include <memory>
 
 namespace eclipse {
 
 class Resource
 {
 public:
-    explicit Resource(const std::string& file_path, const Resource* rel_to = nullptr);
+    explicit Resource(const std::string& file_path, std::shared_ptr<const Resource> rel_to = nullptr);
     ~Resource();
 
     std::istream& get_stream();
@@ -25,9 +26,7 @@ private:
     std::string m_uri;
     std::string m_path;
     bool m_is_remote;
-
     std::ifstream m_stream;
-
     static std::string m_remote_root;
 };
 

@@ -1,13 +1,14 @@
-#include "eclipse/scene/obj_reader.h"
+#include "eclipse/scene/obj_loader.h"
 #include "eclipse/scene/resource.h"
-#include "eclipse/scene/compiler/input_scene_types.h"
-#include "eclipse/scene/compiler/compiler.h"
-#include "eclipse/scene/material/bxdf.h"
-#include "eclipse/scene/material/node.h"
+#include "eclipse/scene/raw_scene.h"
+#include "eclipse/scene/compiler.h"
+#include "eclipse/scene/bxdf.h"
+#include "eclipse/scene/material_node.h"
 #include "eclipse/math/vec2.h"
 #include "eclipse/math/vec3.h"
 #include "eclipse/math/transform.h"
 #include "eclipse/util/logger.h"
+#include "eclipse/util/stop_watch.h"
 
 #include <cstdint>
 #include <cstddef>
@@ -16,10 +17,113 @@
 #include <map>
 #include <vector>
 #include <sstream>
+#include <memory>
 
-namespace eclipse {
+namespace eclipse { namespace obj {
 
-std::string OBJMaterial::get_expression()
+namespace {
+
+struct Material
+{
+    std::string name;
+    Vec3 Kd;
+    Vec3 Ks;
+    Vec3 Ke;
+    float Ke_scaler;
+    Vec3 Tf;
+    float Ni;
+    std::string Kd_tex;
+    std::string Ks_tex;
+    std::string Ke_tex;
+    std::string Tf_tex;
+    std::string bump_tex;
+    std::string normal_tex;
+    std::string expression;
+    std::shared_ptr<Resource> resource;
+    bool used;
+
+    std::string get_expression();
+
+    ~Material()
+    {
+        LOG_DEBUG("obj::Material ", name, " deleted");
+    }
+};
+
+void parse(std::shared_ptr<Resource> res);
+
+std::vector<raw::Triangle> parse_face(const std::vector<std::string>& tokens, size_t vert_off, size_t norm_off, size_t uv_off);
+std::shared_ptr<raw::MeshInstance> parse_mesh_instance(const std::vector<std::string>& tokens);
+void create_default_mesh_instances();
+size_t select_coord_index(const std::string& index_token, size_t coord_list_size, size_t rel_offset);
+void verify_last_parsed_mesh();
+
+void parse_materials(std::shared_ptr<Resource> res);
+void process_materials();
+Material* default_material();
+
+float parse_float(const std::vector<std::string>& tokens);
+Vec2 parse_vec2(const std::vector<std::string>& tokens);
+Vec3 parse_vec3(const std::vector<std::string>& tokens);
+
+void push_call(const std::string& msg);
+void pop_call();
+std::string get_call_stack();
+
+std::unique_ptr<raw::Scene> g_raw_scene;
+
+std::map<std::string, size_t> g_mat_name_to_index_map;
+std::vector<Material*> g_materials;
+Material* g_current_mat;
+
+std::vector<Vec3> g_vertices;
+std::vector<Vec3> g_normals;
+std::vector<Vec2> g_uvs;
+
+std::vector<std::string> g_call_stack;
+const char* g_file;
+size_t g_line_num;
+
+} // anonymous namespace
+
+std::unique_ptr<raw::Scene> load(std::shared_ptr<Resource> scene)
+{
+    g_raw_scene = std::make_unique<raw::Scene>();
+
+    LOG_INFO("Parsing scene from ", scene->get_path());
+
+    StopWatch stopwatch;
+    stopwatch.start();
+
+    parse(scene);
+
+    if (g_raw_scene->mesh_instances.empty())
+        create_default_mesh_instances();
+
+    process_materials();
+
+    for (size_t i = 0; i < g_materials.size(); ++i)
+        delete g_materials[i];
+
+    g_mat_name_to_index_map.clear();
+    g_materials.clear();
+    g_vertices.clear();
+    g_normals.clear();
+    g_uvs.clear();
+    g_call_stack.clear();
+    g_current_mat = nullptr;
+    g_file = nullptr;
+    g_line_num = 0;
+
+    stopwatch.stop();
+    LOG_INFO("Parsed scene in ", stopwatch.get_elapsed_time_ms(), " ms");
+
+    return std::move(g_raw_scene);
+}
+
+namespace {
+
+std::string Material::get_expression()
 {
     if (!expression.empty())
         return expression;
@@ -87,91 +191,63 @@ std::string OBJMaterial::get_expression()
     return expr;
 }
 
-OBJReader::OBJReader()
-    : m_input_scene(new build::InputScene())
+void push_call(const std::string& msg)
 {
+    g_call_stack.push_back(msg);
 }
 
-OBJReader::~OBJReader()
+void pop_call()
 {
-    if (m_input_scene)
-        delete m_input_scene;
-    m_input_scene = nullptr;
+    g_call_stack.pop_back();
 }
 
-Scene* OBJReader::read(Resource* scene)
-{
-    LOG_INFO("Parsing scene from ", scene->get_path());
-
-    m_call_stack.clear();
-
-    parse(scene);
-
-    if (m_input_scene->mesh_instances.empty())
-        create_default_mesh_instances();
-
-    process_materials();
-
-    return new Scene();
-}
-
-void OBJReader::push_call(const std::string& msg)
-{
-    m_call_stack.push_back(msg);
-}
-
-void OBJReader::pop_call()
-{
-    m_call_stack.pop_back();
-}
-
-std::string OBJReader::get_call_stack()
+std::string get_call_stack()
 {
     std::string msg = "\n";
-    for (auto it = m_call_stack.rbegin(); it != m_call_stack.rend(); ++it)
+    for (auto it = g_call_stack.rbegin(); it != g_call_stack.rend(); ++it)
         msg += *it + "\n";
     return msg;
 }
 
 // Generate a mesh instance with an identity transformation for each defined mesh
-void OBJReader::create_default_mesh_instances()
+void create_default_mesh_instances()
 {
-    for (size_t i = 0; i < m_input_scene->meshes.size(); ++i)
+    for (size_t i = 0; i < g_raw_scene->meshes.size(); ++i)
     {
-        build::Mesh* mesh = m_input_scene->meshes[i];
+        std::shared_ptr<raw::Mesh> mesh = g_raw_scene->meshes[i];
 
-        build::MeshInstance* inst = new build::MeshInstance();
+        std::shared_ptr<raw::MeshInstance> inst = std::make_shared<raw::MeshInstance>();
         inst->mesh_index = uint32_t(i);
         inst->transform = Transform();
         inst->bbox = mesh->get_bbox();
         inst->centroid = mesh->get_bbox().get_centroid();
 
-        m_input_scene->mesh_instances.push_back(inst);
+        g_raw_scene->mesh_instances.push_back(inst);
     }
 }
 
 // Generate scene materials for material entries that are in use and update
 // the material indices for all parsed primitives
-void OBJReader::process_materials()
+void process_materials()
 {
     std::map<int, int> obj_mat_to_scene_mat;
-    std::vector<build::Material*> pruned_materials;
+    std::vector<std::shared_ptr<raw::Material>> pruned_materials;
     size_t pruned = 0;
 
-    for (size_t obj_mat_idx = 0; obj_mat_idx < m_materials.size(); ++obj_mat_idx)
+    for (size_t obj_mat_idx = 0; obj_mat_idx < g_materials.size(); ++obj_mat_idx)
     {
-        OBJMaterial* obj_mat = m_materials[obj_mat_idx];
+        Material* obj_mat = g_materials[obj_mat_idx];
 
         // whitelist scene materials
-        if (obj_mat->name == std::string(build::SceneDiffuseMaterialName) ||
-            obj_mat->name == std::string(build::SceneEmissiveMaterialName))
+        if (obj_mat->name == std::string(SceneDiffuseMaterialName) ||
+            obj_mat->name == std::string(SceneEmissiveMaterialName))
             obj_mat->used = true;
 
         // Prune unused materials
         if (!obj_mat->used)
         {
             LOG_INFO("Skipping unused material ", obj_mat->name);
-            build::Material* pruned_mat = new build::Material();
+            std::shared_ptr<raw::Material> pruned_mat = std::make_shared<raw::Material>();
             pruned_mat->name = obj_mat->name;
             pruned_mat->expression = obj_mat->get_expression();
             pruned_mat->resource = obj_mat->resource;
@@ -181,63 +257,63 @@ void OBJReader::process_materials()
             continue;
         }
 
-        build::Material* mat = new build::Material();
+        std::shared_ptr<raw::Material> mat = std::make_shared<raw::Material>();
         mat->name = obj_mat->name;
         mat->expression = obj_mat->get_expression();
         mat->resource = obj_mat->resource;
         mat->used = true;
-        m_input_scene->materials.push_back(mat);
+        g_raw_scene->materials.push_back(mat);
 
-        obj_mat_to_scene_mat[obj_mat_idx] = m_input_scene->materials.size() - 1;
+        obj_mat_to_scene_mat[obj_mat_idx] = g_raw_scene->materials.size() - 1;
     }
 
     // For each primitive, map obj material indices to the generated materials
-    for (auto& mesh : m_input_scene->meshes)
+    for (auto& mesh : g_raw_scene->meshes)
         for (auto& tri : mesh->triangles)
-            tri->material_index = obj_mat_to_scene_mat[tri->material_index];
+            tri.material_index = obj_mat_to_scene_mat[tri.material_index];
 
     // Append pruned materials at the end of the list as they may be
     // reference by material expressions
-    m_input_scene->materials.insert(m_input_scene->materials.end(),
-                                    pruned_materials.begin(),
-                                    pruned_materials.end());
+    g_raw_scene->materials.insert(g_raw_scene->materials.end(),
+                                  pruned_materials.begin(),
+                                  pruned_materials.end());
 
     if (pruned > 0)
         LOG_INFO("Pruned ", pruned, " unused materials");
 }
 
 // Create and select a default material for surfaces not using one
-OBJMaterial* OBJReader::default_material()
+Material* default_material()
 {
     std::string mat_name = "";
 
     size_t mat_index;
-    auto it = m_mat_name_to_index_map.find(mat_name);
+    auto it = g_mat_name_to_index_map.find(mat_name);
 
-    if (it == m_mat_name_to_index_map.end())
+    if (it == g_mat_name_to_index_map.end())
     {
-        OBJMaterial* mat;
+        Material* mat = new Material();
         mat->Kd = Vec3(0.7, 0.7, 0.7);
-        m_materials.push_back(mat);
+        g_materials.push_back(mat);
 
-        mat_index = m_materials.size() - 1;
-        m_mat_name_to_index_map[mat_name] = mat_index;
+        mat_index = g_materials.size() - 1;
+        g_mat_name_to_index_map[mat_name] = mat_index;
     }
     else
     {
         mat_index = it->second;
     }
 
-    m_current_mat = m_materials[mat_index];
+    g_current_mat = g_materials[mat_index];
 
-    return m_current_mat;
+    return g_current_mat;
 }
 
-void OBJReader::parse(Resource* res)
+void parse(std::shared_ptr<Resource> res)
 {
-    size_t rel_vertex_offset = m_vertices.size();
-    size_t rel_normal_offset = m_normals.size();
-    size_t rel_uv_offset = m_uvs.size();
+    size_t rel_vertex_offset = g_vertices.size();
+    size_t rel_normal_offset = g_normals.size();
+    size_t rel_uv_offset = g_uvs.size();
 
     std::istream& input_stream = res->get_stream();
     std::vector<std::string> tokens(100);
@@ -246,8 +322,8 @@ void OBJReader::parse(Resource* res)
     for (std::string line; std::getline(input_stream, line);)
     {
         ++line_num;
-        m_line_num = line_num;
-        m_file = res->get_path().c_str();
+        g_line_num = line_num;
+        g_file = res->get_path().c_str();
         //LOG_DEBUG("[", line_num, "]: ", line);
 
         // Tokenize line
@@ -269,11 +345,11 @@ void OBJReader::parse(Resource* res)
 
             push_call("Referenced from " + tokens[1] + ": " + std::to_string(line_num) + " [" + tokens[0] + "]");
 
-            Resource inner_res(tokens[1], res);
+            std::shared_ptr<Resource> inner_res = std::make_shared<Resource>(tokens[1], res);
             if (tokens[0] == "call")
-                parse(&inner_res);
+                parse(inner_res);
             else
-                parse_materials(&inner_res);
+                parse_materials(inner_res);
 
             pop_call();
         }
@@ -284,24 +360,24 @@ void OBJReader::parse(Resource* res)
                         " -> unsupported syntax for \"usemtl\" \
                         ; expected 1 argument; got ", tokens.size() - 1, get_call_stack());
 
-            if (m_mat_name_to_index_map.find(tokens[1]) == m_mat_name_to_index_map.end())
+            if (g_mat_name_to_index_map.find(tokens[1]) == g_mat_name_to_index_map.end())
                 LOG_ERROR(res->get_path(), ": ", line_num,
                         " -> undefined material with name ", tokens[1], get_call_stack());
 
-            size_t mat_index = m_mat_name_to_index_map[tokens[1]];
-            m_current_mat = m_materials[mat_index];
+            size_t mat_index = g_mat_name_to_index_map[tokens[1]];
+            g_current_mat = g_materials[mat_index];
         }
         else if (tokens[0] == "v")
         {
-            m_vertices.push_back(parse_vec3(tokens));
+            g_vertices.push_back(parse_vec3(tokens));
         }
         else if (tokens[0] == "vn")
         {
-            m_normals.push_back(parse_vec3(tokens));
+            g_normals.push_back(parse_vec3(tokens));
         }
         else if (tokens[0] == "vt")
         {
-            m_uvs.push_back(parse_vec2(tokens));
+            g_uvs.push_back(parse_vec2(tokens));
         }
         else if (tokens[0] == "g" || tokens[0] == "o")
         {
@@ -310,74 +386,74 @@ void OBJReader::parse(Resource* res)
                           "; expected 1 argument; got ", tokens.size() - 1);
 
             verify_last_parsed_mesh();
-            m_input_scene->meshes.push_back(new build::Mesh(tokens[1]));
+            g_raw_scene->meshes.push_back(std::make_shared<raw::Mesh>(tokens[1]));
         }
         else if (tokens[0] == "f")
         {
-            std::vector<build::Triangle*> triangles = parse_face(tokens, rel_vertex_offset, rel_normal_offset, rel_uv_offset);
+            std::vector<raw::Triangle> triangles = parse_face(tokens, rel_vertex_offset, rel_normal_offset, rel_uv_offset);
 
-            if (m_input_scene->meshes.size() == 0)
-                m_input_scene->meshes.push_back(new build::Mesh("default"));
+            if (g_raw_scene->meshes.size() == 0)
+                g_raw_scene->meshes.push_back(std::make_shared<raw::Mesh>("default"));
 
-            size_t mesh_index = m_input_scene->meshes.size() - 1;
-            build::Mesh* mesh = m_input_scene->meshes[mesh_index];
+            size_t mesh_index = g_raw_scene->meshes.size() - 1;
+            std::shared_ptr<raw::Mesh> mesh = g_raw_scene->meshes[mesh_index];
             mesh->mark_bbox_dirty();
             mesh->triangles.insert(mesh->triangles.end(), triangles.begin(), triangles.end());
         }
         else if (tokens[0] == "camera_fov")
         {
-            m_input_scene->camera.fov = parse_float(tokens);
+            g_raw_scene->camera.fov = parse_float(tokens);
         }
         else if (tokens[0] == "camera_eye")
         {
-            m_input_scene->camera.eye = parse_vec3(tokens);
+            g_raw_scene->camera.eye = parse_vec3(tokens);
         }
         else if (tokens[0] == "camera_look")
         {
-            m_input_scene->camera.look_at = parse_vec3(tokens);
+            g_raw_scene->camera.look_at = parse_vec3(tokens);
         }
         else if (tokens[0] == "camera_up")
         {
-            m_input_scene->camera.up = parse_vec3(tokens);
+            g_raw_scene->camera.up = parse_vec3(tokens);
         }
         else if (tokens[0] == "instance")
         {
-            build::MeshInstance* instance = parse_mesh_instance(tokens);
-            m_input_scene->mesh_instances.push_back(instance);
+            std::shared_ptr<raw::MeshInstance> instance = parse_mesh_instance(tokens);
+            g_raw_scene->mesh_instances.push_back(instance);
         }
     }
 
     verify_last_parsed_mesh();
 }
 
-void OBJReader::verify_last_parsed_mesh()
+void verify_last_parsed_mesh()
 {
-    int last_mesh_index = m_input_scene->meshes.size() - 1;
-    if (last_mesh_index >= 0 && m_input_scene->meshes[last_mesh_index]->triangles.size() == 0)
+    int last_mesh_index = g_raw_scene->meshes.size() - 1;
+    if (last_mesh_index >= 0 && g_raw_scene->meshes[last_mesh_index]->triangles.size() == 0)
     {
-        LOG_WARNING("Dropping mesh ", m_input_scene->meshes[last_mesh_index]->name, " as it contains no polygons");
+        LOG_WARNING("Dropping mesh ", g_raw_scene->meshes[last_mesh_index]->name, " as it contains no polygons");
 
-        delete m_input_scene->meshes[last_mesh_index];
-        m_input_scene->meshes.pop_back();
+        //delete g_raw_scene->meshes[last_mesh_index];
+        g_raw_scene->meshes.pop_back();
     }
 }
 
-void OBJReader::parse_materials(Resource* res)
+void parse_materials(std::shared_ptr<Resource> res)
 {
     LOG_INFO("Parsing material library ", res->get_path());
 
     std::istream& input_stream = res->get_stream();
     std::vector<std::string> tokens(100);
 
-    OBJMaterial* current_mat = nullptr;
+    Material* current_mat = nullptr;
     std::string mat_name;
 
     size_t line_num = 0;
     for (std::string line; std::getline(input_stream, line);)
     {
         ++line_num;
-        m_line_num = line_num;
-        m_file = res->get_path().c_str();
+        g_line_num = line_num;
+        g_file = res->get_path().c_str();
 
         //LOG_DEBUG("[", line_num, "]: ", line);
 
@@ -399,17 +475,17 @@ void OBJReader::parse_materials(Resource* res)
                           expected 1 argument; got ", tokens.size() - 1, get_call_stack());
 
             mat_name = tokens[1];
-            if (m_mat_name_to_index_map.find(mat_name) != m_mat_name_to_index_map.end())
+            if (g_mat_name_to_index_map.find(mat_name) != g_mat_name_to_index_map.end())
                 LOG_ERROR(res->get_path(), ": ", line_num,
                           " -> material ", mat_name, " already defined", get_call_stack());
 
-            OBJMaterial* material = new OBJMaterial();
+            Material* material = new Material();
             material->name = mat_name;
             material->resource = res;
-            m_materials.push_back(material);
+            g_materials.push_back(material);
 
-            current_mat = m_materials[m_materials.size() - 1];
-            m_mat_name_to_index_map[mat_name] = m_materials.size() - 1;
+            current_mat = g_materials[g_materials.size() - 1];
+            g_mat_name_to_index_map[mat_name] = g_materials.size() - 1;
         }
         else
         {
@@ -424,11 +500,11 @@ void OBJReader::parse_materials(Resource* res)
                              " -> unsupported syntax for \"include\"; expected 1 argument; \
                              got ", tokens.size() - 1, get_call_stack());
 
-                auto it = m_mat_name_to_index_map.find(tokens[1]);
-                if (it == m_mat_name_to_index_map.end())
+                auto it = g_mat_name_to_index_map.find(tokens[1]);
+                if (it == g_mat_name_to_index_map.end())
                     LOG_ERROR();
 
-                *current_mat = *m_materials[it->second];
+                *current_mat = *g_materials[it->second];
                 current_mat->name = mat_name;
             }
             else if (tokens[0] == "Kd")
@@ -497,13 +573,15 @@ void OBJReader::parse_materials(Resource* res)
     }
 }
 
-std::vector<build::Triangle*> OBJReader::parse_face(const std::vector<std::string>& tokens,
-                                                    size_t rel_vertex_offset, size_t rel_normal_offset, size_t rel_uv_offset)
+std::vector<raw::Triangle> parse_face(const std::vector<std::string>& tokens,
+                                      size_t rel_vertex_offset,
+                                      size_t rel_normal_offset,
+                                      size_t rel_uv_offset)
 {
-    std::vector<build::Triangle*> triangles;
+    std::vector<raw::Triangle> triangles;
     if (tokens.size() < 4 || tokens.size() > 5)
     {
-        LOG_ERROR(m_file, ": ", m_line_num, " -> unsupported syntax for \"f\"; expected 3 arguments \
+        LOG_ERROR(g_file, ": ", g_line_num, " -> unsupported syntax for \"f\"; expected 3 arguments \
                   for triangular faces or 4 arguments for a quad face; got ", tokens.size() - 1,
                   "Select the triangulation option in your exporter");
         return triangles;
@@ -547,7 +625,7 @@ std::vector<build::Triangle*> OBJReader::parse_face(const std::vector<std::strin
         }
         else if (face_tokens.size() != exp_indices)
         {
-            LOG_ERROR(m_file, ": ", m_line_num, " -> expected each face argument to contain ",
+            LOG_ERROR(g_file, ": ", g_line_num, " -> expected each face argument to contain ",
                       exp_indices, "indices; arg ", arg, " contains ", face_tokens.size(), " indices");
             return triangles;
         }
@@ -555,34 +633,34 @@ std::vector<build::Triangle*> OBJReader::parse_face(const std::vector<std::strin
         // Faces must at least define a vertex coord
         if (face_tokens[0].empty())
         {
-            LOG_ERROR(m_file, ": ", m_line_num, " -> face argument ", arg, " does not include a vertex index");
+            LOG_ERROR(g_file, ": ", g_line_num, " -> face argument ", arg, " does not include a vertex index");
             return triangles;
         }
 
-        int offset = select_coord_index(face_tokens[0], m_vertices.size(), rel_vertex_offset);
-        vertices[arg] = m_vertices[offset];
+        int offset = select_coord_index(face_tokens[0], g_vertices.size(), rel_vertex_offset);
+        vertices[arg] = g_vertices[offset];
 
         // Parse uv coords if specified
         if (exp_indices > 1 && !face_tokens[1].empty())
         {
-            offset = select_coord_index(face_tokens[1], m_uvs.size(), rel_uv_offset);
-            uvs[arg] = m_uvs[offset];
+            offset = select_coord_index(face_tokens[1], g_uvs.size(), rel_uv_offset);
+            uvs[arg] = g_uvs[offset];
         }
 
         // Parse normal coords if specified
         if (exp_indices > 2 && !face_tokens[2].empty())
         {
-            offset = select_coord_index(face_tokens[2], m_normals.size(), rel_normal_offset);
-            normals[arg] = m_normals[offset];
+            offset = select_coord_index(face_tokens[2], g_normals.size(), rel_normal_offset);
+            normals[arg] = g_normals[offset];
             has_normals = true;
         }
     }
 
     // If no material defined select the default. Also flag the current material
     // as being in use so we don't prune it later
-    if (m_current_mat == nullptr)
-        m_current_mat = default_material();
-    m_current_mat->used = true;
+    if (g_current_mat == nullptr)
+        g_current_mat = default_material();
+    g_current_mat->used = true;
 
     // If no normals are available generate them from the vertices
     if (!has_normals)
@@ -605,27 +683,27 @@ std::vector<build::Triangle*> OBJReader::parse_face(const std::vector<std::strin
     {
         size_t* indices = &indices_list[i][0];
 
-        build::Triangle* tri = new build::Triangle();
-        tri->material_index = m_mat_name_to_index_map[m_current_mat->name];
+        raw::Triangle tri;
+        tri.material_index = g_mat_name_to_index_map[g_current_mat->name];
 
         for (size_t j = 0; j < 3; ++j)
         {
             size_t index = indices[j];
-            tri->vertices[j] = vertices[index];
-            tri->normals[j] = normals[index];
-            tri->uvs[j] = uvs[index];
+            tri.vertices[j] = vertices[index];
+            tri.normals[j] = normals[index];
+            tri.uvs[j] = uvs[index];
         }
 
-        tri->bbox = BBox(tri->vertices[0], tri->vertices[1], tri->vertices[2]);
-        tri->centroid = (tri->vertices[0] + tri->vertices[1] + tri->vertices[2]) * (1.0f / 3.0f);
+        tri.bbox = BBox(tri.vertices[0], tri.vertices[1], tri.vertices[2]);
+        tri.centroid = (tri.vertices[0] + tri.vertices[1] + tri.vertices[2]) * (1.0f / 3.0f);
 
-        triangles.push_back(tri);
+        triangles.push_back(std::move(tri));
     }
 
     return triangles;
 }
 
-size_t OBJReader::select_coord_index(const std::string& index_token, size_t coord_list_size, size_t rel_offset)
+size_t select_coord_index(const std::string& index_token, size_t coord_list_size, size_t rel_offset)
 {
     int index = std::stoi(index_token);
 
@@ -636,16 +714,16 @@ size_t OBJReader::select_coord_index(const std::string& index_token, size_t coor
         offset = int(rel_offset) + index - 1;
 
     if (offset < 0 || size_t(offset) >= coord_list_size)
-        LOG_ERROR(m_file, ": ", m_line_num, " -> index out of bounds");
+        LOG_ERROR(g_file, ": ", g_line_num, " -> index out of bounds");
 
     return offset;
 }
 
-build::MeshInstance* OBJReader::parse_mesh_instance(const std::vector<std::string>& tokens)
+std::shared_ptr<raw::MeshInstance> parse_mesh_instance(const std::vector<std::string>& tokens)
 {
     if (tokens.size() != 11)
     {
-        LOG_ERROR(m_file, ": ", m_line_num, " -> unsupported syntax for \"instance\";\
+        LOG_ERROR(g_file, ": ", g_line_num, " -> unsupported syntax for \"instance\";\
                   expected 10 arguments: mesh_name tX tY tZ yaw pitch roll scaleX scaleY scaleZ; got ", tokens.size() - 1);
         return nullptr;;
     }
@@ -653,9 +731,9 @@ build::MeshInstance* OBJReader::parse_mesh_instance(const std::vector<std::strin
     // Find object by name
     std::string mesh_name = tokens[1];
     int mesh_index = -1;
-    for (size_t i = 0; i < m_input_scene->meshes.size(); ++i)
+    for (size_t i = 0; i < g_raw_scene->meshes.size(); ++i)
     {
-        build::Mesh* mesh = m_input_scene->meshes[i];
+        std::shared_ptr<raw::Mesh> mesh = g_raw_scene->meshes[i];
         if (mesh->name == mesh_name)
         {
             mesh_index = int(i);
@@ -664,7 +742,7 @@ build::MeshInstance* OBJReader::parse_mesh_instance(const std::vector<std::strin
     }
     if (mesh_index == -1)
     {
-        LOG_ERROR(m_file, ": ", m_line_num, " -> unknown mesh with name ", mesh_name);
+        LOG_ERROR(g_file, ": ", g_line_num, " -> unknown mesh with name ", mesh_name);
         return nullptr;
     }
 
@@ -691,10 +769,10 @@ build::MeshInstance* OBJReader::parse_mesh_instance(const std::vector<std::strin
     Transform total_xfm = trans_xfm * rot_xfm * scale_xfm;
 
     // Get mesh bbox and recalculate a new BBox for the mesh instance
-    BBox mesh_bbox = m_input_scene->meshes[mesh_index]->get_bbox();
+    BBox mesh_bbox = g_raw_scene->meshes[mesh_index]->get_bbox();
     BBox inst_bbox = transform_bbox(total_xfm, mesh_bbox);
 
-    build::MeshInstance* instance = new build::MeshInstance();
+    std::shared_ptr<raw::MeshInstance> instance = std::make_shared<raw::MeshInstance>();
     instance->mesh_index = uint32_t(mesh_index);
     instance->bbox = inst_bbox;
     instance->centroid = inst_bbox.get_centroid();
@@ -703,11 +781,11 @@ build::MeshInstance* OBJReader::parse_mesh_instance(const std::vector<std::strin
     return instance;
 }
 
-float OBJReader::parse_float(const std::vector<std::string>& tokens)
+float parse_float(const std::vector<std::string>& tokens)
 {
     if (tokens.size() < 2)
     {
-        LOG_ERROR(m_file, ": ", m_line_num,
+        LOG_ERROR(g_file, ": ", g_line_num,
                   " -> unsupported syntax for ", tokens[0],
                   "; expected 1 arguments; got ", tokens.size() - 1, get_call_stack());
         return 0.0f;
@@ -716,11 +794,11 @@ float OBJReader::parse_float(const std::vector<std::string>& tokens)
     return std::stof(tokens[1]);
 }
 
-Vec2 OBJReader::parse_vec2(const std::vector<std::string>& tokens)
+Vec2 parse_vec2(const std::vector<std::string>& tokens)
 {
     if (tokens.size() < 3)
     {
-        LOG_ERROR(m_file, ": ", m_line_num,
+        LOG_ERROR(g_file, ": ", g_line_num,
                   " -> Unsupported syntax for ", tokens[0],
                   "; expected 2 arguments; got ", tokens.size() - 1, get_call_stack());
         return Vec2();
@@ -729,11 +807,11 @@ Vec2 OBJReader::parse_vec2(const std::vector<std::string>& tokens)
     return Vec2(std::stof(tokens[1]), std::stof(tokens[2]));
 }
 
-Vec3 OBJReader::parse_vec3(const std::vector<std::string>& tokens)
+Vec3 parse_vec3(const std::vector<std::string>& tokens)
 {
     if (tokens.size() < 4)
     {
-        LOG_ERROR(m_file, ": ", m_line_num,
+        LOG_ERROR(g_file, ": ", g_line_num,
                   " -> Unsupported syntax for ", tokens[0],
                   "; expected 3 arguments; got ", tokens.size() - 1, get_call_stack());
         return Vec3();
@@ -742,4 +820,6 @@ Vec3 OBJReader::parse_vec3(const std::vector<std::string>& tokens)
     return Vec3(std::stof(tokens[1]), std::stof(tokens[2]), std::stof(tokens[3]));
 }
 
-} // namespace eclipse
+} // anonymous namespace
+
+} } // namespace eclipse::obj

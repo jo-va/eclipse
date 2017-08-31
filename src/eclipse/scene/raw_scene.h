@@ -6,11 +6,13 @@
 #include "eclipse/math/bbox.h"
 #include "eclipse/math/transform.h"
 #include "eclipse/scene/resource.h"
+#include "eclipse/util/logger.h"
 
 #include <vector>
 #include <string>
+#include <memory>
 
-namespace eclipse { namespace build {
+namespace eclipse { namespace raw {
 
 struct Triangle
 {
@@ -31,7 +33,7 @@ struct Triangle
 struct Mesh
 {
     std::string name;
-    std::vector<Triangle*> triangles;
+    std::vector<Triangle> triangles;
 
     BBox bbox;
     bool bbox_needs_update;
@@ -46,10 +48,15 @@ struct Mesh
         {
             bbox = BBox();
             for (auto tri : triangles)
-                bbox.merge(tri->get_bbox());
+                bbox.merge(tri.get_bbox());
             bbox_needs_update = false;
         }
         return bbox;
+    }
+
+    ~Mesh()
+    {
+        LOG_DEBUG("Mesh ", name, " deleted");
     }
 };
 
@@ -63,16 +70,26 @@ struct MeshInstance
 
     BBox get_bbox() const { return bbox; }
     Vec3 get_centroid() const { return centroid; }
+
+    ~MeshInstance()
+    {
+        LOG_DEBUG("MeshInstance ", mesh_index, " deleted");
+    }
 };
 
 struct Material
 {
     std::string name;
     std::string expression;
-    Resource* resource;
+    std::shared_ptr<Resource> resource;
     bool used;
 
     Material() : used(false) { }
+
+    ~Material()
+    {
+        LOG_DEBUG("Material ", name, " deleted");
+    }
 };
 
 struct Camera
@@ -85,12 +102,12 @@ struct Camera
     Camera() : fov(45), eye(0, 0, 0), look_at(0, 0, -1), up(0, 1, 0) { }
 };
 
-struct InputScene
+struct Scene
 {
-    std::vector<Mesh*> meshes;
-    std::vector<MeshInstance*> mesh_instances;
-    std::vector<Material*> materials;
+    std::vector<std::shared_ptr<Mesh>> meshes;
+    std::vector<std::shared_ptr<MeshInstance>> mesh_instances;
+    std::vector<std::shared_ptr<Material>> materials;
     Camera camera;
 };
 
-} } // namespace eclipse::build
+} } // namespace eclipse::raw
