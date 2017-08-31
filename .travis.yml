@@ -1,11 +1,29 @@
-language: cpp
+dist: trusty
+sudo: required
+language:
+  - cpp
 compiler:
   - gcc
-os:
-  - linux
+addons:
+  apt:
+    sources:
+      - ubuntu-toolchain-r-test
+    packages:
+      - gcc-6
+      - g++-6
+      - cmake
+      - ocl-icd-opencl-dev
+      - libglew-dev
+      - xorg-dev
+      - libglu1-mesa-dev
+      - libcurl3-dev
 script:
-  - mkdir build
-  - cd build
+  - ln -s /usr/bin/gcc-6 /usr/local/bin/gcc
+  - ln -s /usr/bin/g++-6 /usr/local/bin/g++
+  - export CC=/usr/bin/gcc-6
+  - export CXX=/usr/bin/g++-6
+  - gcc -v && g++ -v && cmake --version
+  - mkdir build && cd build
   - cmake .. && make
 install:
     # Update system
