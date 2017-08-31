@@ -1,0 +1,24 @@
+language: cpp
+compiler:
+  - gcc
+os:
+  - linux
+script:
+  - mkdir build
+  - cd build
+  - cmake .. && make
+install:
+    # Update system
+  - sudo apt-get update -qq
+    # Install Opencl and GLEW dependencies
+  - sudo apt-get install -qq ocl-icd-opencl-dev libglew-dev
+    # Install dependencies for GLFW
+  - sudo apt-get install -qq xorg-dev libglu1-mesa-dev
+    # Install CURL
+  - sudo apt-get install -qq libcurl3-dev
+    # Build GLFW
+  - mkdir TRAVIS_TMP && cd TRAVIS_TMP
+  - git clone https://github.com/glfw/glfw.git && cd glfw
+  - cmake -DBUILD_SHARED_LIBS=ON -DGLFW_BUILD_EXAMPLES=OFF -DGLFW_BUILD_TESTS=OFF -DGLFW_BUILD_DOCS=OFF
+  - make && sudo make install
+  - cd ../..
