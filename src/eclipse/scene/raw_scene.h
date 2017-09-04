@@ -60,6 +60,8 @@ struct Mesh
     }
 };
 
+typedef std::shared_ptr<Mesh> MeshPtr;
+
 struct MeshInstance
 {
     uint32_t mesh_index;
@@ -77,6 +79,8 @@ struct MeshInstance
     }
 };
 
+typedef std::shared_ptr<MeshInstance> MeshInstancePtr;
+
 struct Material
 {
     std::string name;
@@ -91,6 +95,8 @@ struct Material
         LOG_DEBUG("Material ", name, " deleted");
     }
 };
+
+typedef std::shared_ptr<Material> MaterialPtr;
 
 struct Camera
 {

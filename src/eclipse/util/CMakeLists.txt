@@ -1,12 +1,10 @@
 set(UTIL_HEADERS logger.h
                  log_message.h
-                 thread_pool.h
                  stop_watch.h
-                 mpmc_queue.h
-                 thread_pool.h
                  http_downloader.h)
 
 set(UTIL_SOURCES logger.cpp
+                 log_message.cpp
                  stop_watch.cpp
                  http_downloader.cpp)
 

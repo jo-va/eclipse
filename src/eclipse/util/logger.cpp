@@ -43,7 +43,7 @@ std::string format_message(const LogMessage& msg)
 #endif
 
     const char* levels[] = { "DEBUG", "INFO", "WARNING", "ERROR" };
-    oss << '[' << levels[(int)msg.level % 4] << "] ";
+    oss << '[' << levels[(int)msg.level % 4] << "] " << msg.num << ". ";
 
 #ifdef LOG_COLOR
     oss << "\033[0m";

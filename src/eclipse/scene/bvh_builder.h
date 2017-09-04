@@ -1,91 +1,41 @@
 #pragma once
 
+#include "eclipse/scene/bvh_node.h"
 #include "eclipse/math/math.h"
 #include "eclipse/math/vec3.h"
 #include "eclipse/math/bbox.h"
-#include "eclipse/util/thread_pool.h"
 
 #include <cstdint>
 #include <vector>
-#include <future>
+#include <functional>
 
 namespace eclipse { namespace bvh {
 
-struct Node
-{
-    BBox bbox;
-    int32_t left_data;
-    int32_t right_data;
-
-    void set_mesh_index(uint32_t index)
-    {
-        left_data = -int32_t(index);
-    }
-
-    uint32_t get_mesh_index() const
-    {
-        return uint32_t(-left_data);
-    }
-
-    void set_primitives(uint32_t first, uint32_t num)
-    {
-        left_data = -int32_t(first);
-        right_data = int32_t(num);
-    }
-
-    uint32_t get_primitives_offset() const
-    {
-        return uint32_t(-left_data);
-    }
-
-    uint32_t get_num_primitives() const
-    {
-        return uint32_t(right_data);
-    }
-
-    void offset_child_nodes(int32_t offset)
-    {
-        // Ignore leaves
-        if (left_data <= 0)
-            return;
-
-        left_data += offset;
-        right_data += offset;
-    }
-
-    void set_child_nodes(uint32_t left, uint32_t right)
-    {
-        left_data = int32_t(left);
-        right_data = int32_t(right);
-    }
-};
-
-//
-// Object must provide the following methods:
+// Object must be a pointer to a type with the following methods:
 //     BBox get_bbox();
 //     Vec3 get_centroid();
 //
 // ScoringStrategy must provide the following static methods:
-//     float score_split(const std::vector<Object*>& items, uint8_t axis, float split_point, uint32_t* left_count, uint32_t* right_count)
-//     float score_partition(const std::vector<Object*>& items)
+//     float score_split(const std::vector<Object>& items, uint8_t axis, float split_point, uint32_t* left_count, uint32_t* right_count)
+//     float score_partition(const std::vector<Object>& items)
 //
-template <typename Object, typename ScoringStrategy>
+template <typename Object, typename ObjectAccesor, typename ScoringStrategy>
 class Builder
 {
 public:
-    typedef void (*LeafCreationCallback)(Node* leaf, const std::vector<Object*>& items);
+    typedef std::function<void(Node*, const std::vector<Object>&)> LeafCreationCallback;
 
-    static const std::vector<Node>& build(const std::vector<Object*>& items, LeafCreationCallback callback, uint32_t min_leaf_size);
+    static const std::vector<Node> build(const std::vector<Object>& items, uint32_t min_leaf_size, LeafCreationCallback callback);
 
 private:
-    Builder()
+    Builder(const std::vector<Object>& items)
         : m_callback(nullptr), m_min_leaf_size(0), m_num_partitioned_items(0), m_num_total_items(0)
-        , m_num_nodes(0), m_num_leaves(0), m_max_depth(0)
+        , m_num_nodes(0), m_num_leaves(0), m_max_depth(0), m_accessor(items)
     {
     }
 
-    uint32_t partition(const std::vector<Object*>& items, int depth);
-    uint32_t create_leaf(Node* node, const std::vector<Object*>& items);
+    uint32_t partition(const std::vector<Object>& items, int depth);
+    uint32_t create_leaf(Node* node, const std::vector<Object>& items);
 
 private:
 
@@ -104,21 +54,22 @@ private:
 
     LeafCreationCallback m_callback;
 
-    mutable ThreadPool<SplitScore> m_thread_pool;
-
     uint32_t m_min_leaf_size;
     uint32_t m_num_partitioned_items;
     uint32_t m_num_total_items;
     uint32_t m_num_nodes;
     uint32_t m_num_leaves;
     uint32_t m_max_depth;
+
+    ObjectAccesor m_accessor;
 };
 
-template <typename Object, typename ScoringStrategy>
-const std::vector<Node>& Builder<Object, ScoringStrategy>::build(const std::vector<Object*>& items, LeafCreationCallback callback, uint32_t min_leaf_size)
+template <typename Object, typename ObjectAccesor, typename ScoringStrategy>
+const std::vector<Node> Builder<Object, ObjectAccesor, ScoringStrategy>::build(
+        const std::vector<Object>& items, uint32_t min_leaf_size, LeafCreationCallback callback)
 {
-    Builder builder;
-    builder.m_callback(callback);
+    Builder builder(items);
+    builder.m_callback = callback;
     builder.m_min_leaf_size = min_leaf_size;
     builder.m_num_total_items = items.size();
 
@@ -127,85 +78,89 @@ const std::vector<Node>& Builder<Object, ScoringStrategy>::build(const std::vect
     return builder.m_nodes;
 }
 
-template <typename Object, typename ScoringStrategy>
-uint32_t Builder<Object, ScoringStrategy>::partition(const std::vector<Object*>& items, int depth)
+template <typename Object, typename ObjectAccesor, typename ScoringStrategy>
+uint32_t Builder<Object, ObjectAccesor, ScoringStrategy>::partition(const std::vector<Object>& items, int depth)
 {
-    if (depth > m_max_depth)
+    if (depth > (int)m_max_depth)
         m_max_depth = depth;
 
     Node node;
 
     // Calculate BBox for node
-    for (auto item : items)
-        node.bbox.merge(item->get_bbox());
+    for (auto& item : items)
+        node.bbox.merge(m_accessor.get_bbox(item));
 
     if (items.size() <= m_min_leaf_size)
         return create_leaf(&node, items);
 
     // Get current node score
-    float best_score = ScoringStrategy::score_partition(items);
+    float best_score = ScoringStrategy::score_partition(items, &m_accessor);
 
-    m_thread_pool.set_sleep_time(0);
-    std::vector<std::future<SplitScore>> jobs;
-    jobs.reserve((uint32_t)(1024.0f / (float)(depth + 1) * 3));
+    constexpr size_t num_buckets = 100;
+    static SplitScore score_list[3 * num_buckets];
+    size_t num_scores = 0;
 
-    Vec3 side = node.bbox.pmax - node.bbox.pmin;
+    const Vec3 side = node.bbox.pmax - node.bbox.pmin;
 
     for (uint8_t axis = 0; axis < 3; ++axis)
     {
+        // Skip axis if bbox dimension is too small
         if (side[axis] < min_side_length)
             continue;
 
-        float split_step = side[axis] / (1024.0f / (float)(depth + 1));
+        const float split_step = side[axis] / (float)num_buckets;
         if (split_step < min_split_step)
             continue;
 
-        for (float split_point = node.bbox.pmin[axis]; split_point < node.bbox.pmax[axis]; split_point += split_step)
+        // Compute split scores in parallel
+#pragma omp parallel for
+        for (size_t i = 0; i < num_buckets; ++i)
         {
-            jobs.push_back(std::move(m_thread_pool.submit(([this, items, axis, split_point]() -> SplitScore
-            {
-                SplitScore score;
-                score.axis = axis;
-                score.split_point = split_point;
-                score.score = ScoringStrategy::score_split(items, axis, split_point, &score.left_count, &score.right_count);
-
-                return score;
-            }))));
+            float split_point = node.bbox.pmin[axis] + i * split_step;
+            SplitScore score;
+            score.axis = axis;
+            score.split_point = split_point;
+            score.score = ScoringStrategy::score_split(items, &m_accessor, axis, split_point, &score.left_count, &score.right_count);
+            score_list[num_scores++] = score;
         }
     }
 
-    for (auto& job : jobs)
-        job.wait();
-
+    // Process all scores and pick the best split
     SplitScore* best_split = nullptr;
-
-    for (size_t i = 0; i < jobs.size(); ++i)
+    for (size_t i = 0; i < num_scores; ++i)
     {
-        SplitScore score = jobs[i];
-        if (score.score < best_score)
+        SplitScore* score = &score_list[i];
+        if (score->score < best_score)
         {
-            best_score = score.score;
-            best_split = &score;
+            best_score = score->score;
+            best_split = score;
         }
     }
 
+    // If we can't find a split that improves the current node score create a leaf
     if (best_split == nullptr)
         return create_leaf(&node, items);
 
-    std::vector<Object*> left_items, right_items;
-    for (auto item : items)
+    // Split items list into two sets
+    std::vector<Object> left_items, right_items;
+    left_items.reserve(best_split->left_count);
+    right_items.reserve(best_split->right_count);
+
+    for (auto& item : items)
     {
-        Vec3 center = item->get_centroid();
-        if (center[best_split->axis] < best_split.split_point)
+        Vec3 center = m_accessor.get_centroid(item);
+        if (center[best_split->axis] < best_split->split_point)
             left_items.push_back(item);
         else
             right_items.push_back(item);
     }
 
+    // Add node to list
     uint32_t node_index = m_nodes.size();
     m_nodes.push_back(node);
     ++m_num_nodes;
 
+    // Partition children and update node indices
     uint32_t left_node_index = partition(left_items, depth + 1);
     uint32_t right_node_index = partition(right_items, depth + 1);
     m_nodes[node_index].set_child_nodes(left_node_index, right_node_index);
@@ -213,35 +168,43 @@ uint32_t Builder<Object, ScoringStrategy>::partition(const std::vector<Object*>&
     return node_index;
 }
 
-template <typename Object, typename ScoringStrategy>
-uint32_t Builder<Object, ScoringStrategy>::create_leaf(Node* node, const std::vector<Object*>& items)
+template <typename Object, typename ObjectAccesor, typename ScoringStrategy>
+uint32_t Builder<Object, ObjectAccesor, ScoringStrategy>::create_leaf(Node* node, const std::vector<Object>& items)
 {
     m_callback(node, items);
 
+    // Append node to list
     uint32_t node_index = m_nodes.size();
     m_nodes.push_back(*node);
 
+    // Update stats
     ++m_num_leaves;
     m_num_partitioned_items += items.size();
 
     return node_index;
 }
 
-template <typename Object>
+template <typename Object, typename ObjectAccesor>
 class SAHStrategy
 {
 public:
-    static float score_split(const std::vector<Object*>& items, uint8_t axis, float split_point, uint32_t* left_count, uint32_t* right_count)
+
+    // Score a BVH split based on the surface area heuristic. The SAH calculates
+    // the split score using the formulat:
+    // left count * left BBox area + right count * right BBox area.
+    // SAH avoids splits that generate empty partitions by assigning the worst
+    // possible score when it encounters such cases.
+    static float score_split(const std::vector<Object>& items, ObjectAccesor* accessor, uint8_t axis, float split_point, uint32_t* left_count, uint32_t* right_count)
     {
         BBox left_bbox, right_bbox;
 
         *left_count = 0;
         *right_count = 0;
 
-        for (auto object : items)
+        for (auto& object : items)
         {
-            Vec3 center = object->get_centroid();
-            BBox bbox = object->get_bbox();
+            const Vec3 center = accessor->get_centroid(object);
+            const BBox bbox = accessor->get_bbox(object);
 
             if (center[axis] < split_point)
             {
@@ -258,25 +221,28 @@ public:
         if (*left_count == 0 || *right_count == 0)
             return pos_inf;
 
-        Vec3 left_side = left_bbox.pmax - left_bbox.pmin;
-        Vec3 right_side = right_bbox.pmax - right_bbox.pmin;
+        const Vec3 left_side = left_bbox.pmax - left_bbox.pmin;
+        const Vec3 right_side = right_bbox.pmax - right_bbox.pmin;
 
-        float score = *left_count * (left_side.x * left_side.y + left_side.x * left_side.z + left_side.y * left_side.z) +
-                      *right_count * (right_side.x * right_side.y + right_side.x * right_side.z + right_side.y * right_side.z);
+        float score = (float)*left_count * (left_side.x * left_side.y + left_side.x * left_side.z + left_side.y * left_side.z) +
+                      (float)*right_count * (right_side.x * right_side.y + right_side.x * right_side.z + right_side.y * right_side.z);
 
         return score;
     }
 
-    static float score_partition(const std::vector<Object*>& items)
+    // Calculate score for a partitioned list using formula:
+    // count * BBox area
+    // If the list is empty, then this method returns the worst possible score.
+    static float score_partition(const std::vector<Object>& items, ObjectAccesor* accessor)
     {
         if (items.empty())
             return pos_inf;
 
         BBox bbox;
-        for (auto object : items)
-            bbox.merge(object->get_bbox());
+        for (auto& object : items)
+            bbox.merge(accessor->get_bbox(object));
 
-        Vec3 side = bbox.pmax - bbox.pmin;
+        const Vec3 side = bbox.pmax - bbox.pmin;
 
         return (float)items.size() * (side.x * side.y + side.x * side.z + side.y * side.z);
     }

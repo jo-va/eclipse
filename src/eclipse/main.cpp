@@ -4,6 +4,7 @@
 #include "eclipse/util/logger.h"
 #include "eclipse/scene/resource.h"
 #include "eclipse/scene/obj_loader.h"
+#include "eclipse/scene/compiler.h"
 
 #include <iostream>
 #include <sstream>
@@ -22,13 +23,15 @@ int main(int argc, char* argv[])
 {
     if (argc > 1)
     {
-        std::shared_ptr<Resource> r1 = std::make_shared<Resource>(argv[1]);
-        std::unique_ptr<raw::Scene> s1 = obj::load(r1);
+        std::shared_ptr<Resource> r = std::make_shared<Resource>(argv[1]);
+        std::shared_ptr<raw::Scene> s = scene::load_obj(r);
+        std::shared_ptr<Scene> s2 = scene::compile(s);
     }
     if (argc > 2)
     {
-        std::shared_ptr<Resource> r2 = std::make_shared<Resource>(argv[2]);
-        std::unique_ptr<raw::Scene> s2 = obj::load(r2);
+        std::shared_ptr<Resource> r = std::make_shared<Resource>(argv[2]);
+        std::shared_ptr<raw::Scene> s = scene::load_obj(r);
+        std::shared_ptr<Scene> s2 = scene::compile(s);
     }
 
     Window window(g_width, g_height, "Pathtracer");

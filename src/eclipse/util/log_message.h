@@ -28,12 +28,17 @@ struct LogMessage
         (void)List{ 0, ((void)(oss << args), 0) ... };
         msg.message = oss.str();
 
+        msg.num = ++g_num;
+
         return msg;
     }
 
     std::string message;
     std::chrono::time_point<std::chrono::high_resolution_clock> timepoint;
     Level level;
+    unsigned int num;
+
+    static unsigned int g_num;
 };
 
 } } // namespace eclipse::logging

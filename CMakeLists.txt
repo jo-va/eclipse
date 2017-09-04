@@ -10,6 +10,8 @@ find_package(GLEW REQUIRED)
 find_package(glfw3 REQUIRED)
 find_package(OpenMP REQUIRED)
 find_package(CURL REQUIRED)
+find_package(BISON REQUIRED)
+find_package(FLEX REQUIRED)
 
 # Set compilation flags
 set(CMAKE_CXX_STANDARD 14)

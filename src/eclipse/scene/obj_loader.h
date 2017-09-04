@@ -7,8 +7,8 @@ namespace eclipse {
 
 class Resource;
 
-namespace obj {
+namespace scene {
 
-std::unique_ptr<raw::Scene> load(std::shared_ptr<Resource> scene);
+std::unique_ptr<raw::Scene> load_obj(std::shared_ptr<Resource> scene);
 
-} } // namespace eclipse::obj
+} } // namespace eclipse::scene

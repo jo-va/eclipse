@@ -2,8 +2,7 @@
 #include "eclipse/scene/resource.h"
 #include "eclipse/scene/raw_scene.h"
 #include "eclipse/scene/compiler.h"
-#include "eclipse/scene/bxdf.h"
-#include "eclipse/scene/material_node.h"
+#include "eclipse/scene/mat_expr.h"
 #include "eclipse/math/vec2.h"
 #include "eclipse/math/vec3.h"
 #include "eclipse/math/transform.h"
@@ -19,7 +18,7 @@
 #include <sstream>
 #include <memory>
 
-namespace eclipse { namespace obj {
+namespace eclipse { namespace scene {
 
 namespace {
 
@@ -84,10 +83,24 @@ std::vector<std::string> g_call_stack;
 const char* g_file;
 size_t g_line_num;
 
+size_t g_num_triangles;
+size_t g_num_vertices;
+
 } // anonymous namespace
 
-std::unique_ptr<raw::Scene> load(std::shared_ptr<Resource> scene)
+std::unique_ptr<raw::Scene> load_obj(std::shared_ptr<Resource> scene)
 {
+    g_mat_name_to_index_map.clear();
+    g_materials.clear();
+    g_vertices.clear();
+    g_normals.clear();
+    g_uvs.clear();
+    g_call_stack.clear();
+    g_current_mat = nullptr;
+    g_file = nullptr;
+    g_line_num = 0;
+    g_num_triangles = 0;
+    g_num_vertices = 0;
     g_raw_scene = std::make_unique<raw::Scene>();
 
     LOG_INFO("Parsing scene from ", scene->get_path());
@@ -105,18 +118,10 @@ std::unique_ptr<raw::Scene> load(std::shared_ptr<Resource> scene)
     for (size_t i = 0; i < g_materials.size(); ++i)
         delete g_materials[i];
 
-    g_mat_name_to_index_map.clear();
-    g_materials.clear();
-    g_vertices.clear();
-    g_normals.clear();
-    g_uvs.clear();
-    g_call_stack.clear();
-    g_current_mat = nullptr;
-    g_file = nullptr;
-    g_line_num = 0;
-
     stopwatch.stop();
-    LOG_INFO("Parsed scene in ", stopwatch.get_elapsed_time_ms(), " ms");
+    LOG_INFO("Parsed scene in ", stopwatch.get_elapsed_time_ms(), " ms [",
+             g_raw_scene->mesh_instances.size(), " mesh instances - ",
+             g_num_vertices, " vertices - ", g_num_triangles, " triangles]");
 
     return std::move(g_raw_scene);
 }
@@ -131,12 +136,12 @@ std::string Material::get_expression()
     bool is_specular_reflection = max_component(Ks) > 0.0f || !Ks_tex.empty();
     bool is_emissive = max_component(Ke) > 0.0f || !Ke_tex.empty();
 
-    material::BXDF bxdf;
+    material::BxdfType bxdf;
     std::vector<std::string> expr_args;
 
     if (is_specular_reflection && Ni == 0.0f)
     {
-        bxdf = material::BXDF::CONDUCTOR;
+        bxdf = material::CONDUCTOR;
         if (!Ks_tex.empty())
             expr_args.push_back(std::string(material::param::Specularity) + ": " + Ks_tex);
         else if (max_component(Ks) > 0.0f)
@@ -144,7 +149,7 @@ std::string Material::get_expression()
     }
     else if (is_specular_reflection && Ni != 0.0f)
     {
-        bxdf = material::BXDF::DIELECTRIC;
+        bxdf = material::DIELECTRIC;
         if (!Ks_tex.empty())
             expr_args.push_back(std::string(material::param::Specularity) + ": " + Ks_tex);
         else if (max_component(Ks) > 0.0f)
@@ -159,7 +164,7 @@ std::string Material::get_expression()
     }
     else if (is_emissive)
     {
-        bxdf = material::BXDF::EMISSIVE;
+        bxdf = material::EMISSIVE;
         if (!Ke_tex.empty())
             expr_args.push_back(std::string(material::param::Radiance) + ": " + Ke_tex);
         else if (max_component(Ke) > 0.0f)
@@ -170,7 +175,7 @@ std::string Material::get_expression()
     }
     else
     {
-        bxdf = material::BXDF::DIFFUSE;
+        bxdf = material::DIFFUSE;
         if (!Kd_tex.empty())
             expr_args.push_back(std::string(material::param::Reflectance) + ": " + Kd_tex);
         else if (max_component(Kd) > 0.0f)
@@ -214,9 +219,9 @@ void create_default_mesh_instances()
 {
     for (size_t i = 0; i < g_raw_scene->meshes.size(); ++i)
     {
-        std::shared_ptr<raw::Mesh> mesh = g_raw_scene->meshes[i];
+        auto mesh = g_raw_scene->meshes[i];
 
-        std::shared_ptr<raw::MeshInstance> inst = std::make_shared<raw::MeshInstance>();
+        auto inst = std::make_shared<raw::MeshInstance>();
         inst->mesh_index = uint32_t(i);
         inst->transform = Transform();
         inst->bbox = mesh->get_bbox();
@@ -247,7 +252,7 @@ void process_materials()
         if (!obj_mat->used)
         {
             LOG_INFO("Skipping unused material ", obj_mat->name);
-            std::shared_ptr<raw::Material> pruned_mat = std::make_shared<raw::Material>();
+            auto pruned_mat = std::make_shared<raw::Material>();
             pruned_mat->name = obj_mat->name;
             pruned_mat->expression = obj_mat->get_expression();
             pruned_mat->resource = obj_mat->resource;
@@ -257,7 +262,7 @@ void process_materials()
             continue;
         }
 
-        std::shared_ptr<raw::Material> mat = std::make_shared<raw::Material>();
+        auto mat = std::make_shared<raw::Material>();
         mat->name = obj_mat->name;
         mat->expression = obj_mat->get_expression();
         mat->resource = obj_mat->resource;
@@ -345,7 +350,7 @@ void parse(std::shared_ptr<Resource> res)
 
             push_call("Referenced from " + tokens[1] + ": " + std::to_string(line_num) + " [" + tokens[0] + "]");
 
-            std::shared_ptr<Resource> inner_res = std::make_shared<Resource>(tokens[1], res);
+            auto inner_res = std::make_shared<Resource>(tokens[1], res);
             if (tokens[0] == "call")
                 parse(inner_res);
             else
@@ -370,6 +375,7 @@ void parse(std::shared_ptr<Resource> res)
         else if (tokens[0] == "v")
         {
             g_vertices.push_back(parse_vec3(tokens));
+            ++g_num_vertices;
         }
         else if (tokens[0] == "vn")
         {
@@ -391,12 +397,13 @@ void parse(std::shared_ptr<Resource> res)
         else if (tokens[0] == "f")
         {
             std::vector<raw::Triangle> triangles = parse_face(tokens, rel_vertex_offset, rel_normal_offset, rel_uv_offset);
+            g_num_triangles += triangles.size();
 
             if (g_raw_scene->meshes.size() == 0)
                 g_raw_scene->meshes.push_back(std::make_shared<raw::Mesh>("default"));
 
             size_t mesh_index = g_raw_scene->meshes.size() - 1;
-            std::shared_ptr<raw::Mesh> mesh = g_raw_scene->meshes[mesh_index];
+            auto mesh = g_raw_scene->meshes[mesh_index];
             mesh->mark_bbox_dirty();
             mesh->triangles.insert(mesh->triangles.end(), triangles.begin(), triangles.end());
         }
@@ -418,7 +425,7 @@ void parse(std::shared_ptr<Resource> res)
         }
         else if (tokens[0] == "instance")
         {
-            std::shared_ptr<raw::MeshInstance> instance = parse_mesh_instance(tokens);
+            auto instance = parse_mesh_instance(tokens);
             g_raw_scene->mesh_instances.push_back(instance);
         }
     }
@@ -733,7 +740,7 @@ std::shared_ptr<raw::MeshInstance> parse_mesh_instance(const std::vector<std::st
     int mesh_index = -1;
     for (size_t i = 0; i < g_raw_scene->meshes.size(); ++i)
     {
-        std::shared_ptr<raw::Mesh> mesh = g_raw_scene->meshes[i];
+        auto mesh = g_raw_scene->meshes[i];
         if (mesh->name == mesh_name)
         {
             mesh_index = int(i);
@@ -772,7 +779,7 @@ std::shared_ptr<raw::MeshInstance> parse_mesh_instance(const std::vector<std::st
     BBox mesh_bbox = g_raw_scene->meshes[mesh_index]->get_bbox();
     BBox inst_bbox = transform_bbox(total_xfm, mesh_bbox);
 
-    std::shared_ptr<raw::MeshInstance> instance = std::make_shared<raw::MeshInstance>();
+    auto instance = std::make_shared<raw::MeshInstance>();
     instance->mesh_index = uint32_t(mesh_index);
     instance->bbox = inst_bbox;
     instance->centroid = inst_bbox.get_centroid();
@@ -822,4 +829,4 @@ Vec3 parse_vec3(const std::vector<std::string>& tokens)
 
 } // anonymous namespace
 
-} } // namespace eclipse::obj
+} } // namespace eclipse::scene
