@@ -17,12 +17,14 @@ set(SCENE_HEADERS scene.h
                   compiler.h
                   bvh_node.h
                   bvh_builder.h
+                  known_ior.h
                   mat_expr.h
                   mat_expr_scanner.h)
 
 set(SCENE_SOURCES resource.cpp
                   obj_loader.cpp
                   compiler.cpp
+                  known_ior.cpp
                   mat_expr.cpp
                   ${CMAKE_CURRENT_BINARY_DIR}/mat_expr_parser.cxx
                   ${CMAKE_CURRENT_BINARY_DIR}/mat_expr_scanner.cxx)

@@ -18,7 +18,7 @@
 %}
 
 num      [+-]?(([0-9]*\.?[0-9]+)|([0-9]+\.))
-texture  \"[a-zA-Z_./][a-zA-Z0-9_./]*(.(?i:jpg)|.(?i:jpeg)|.(?i:png))\"
+texture  \"[a-zA-Z_./][a-zA-Z0-9\-_./]*(.(?i:jpg)|.(?i:jpeg)|.(?i:png)|.(?i:exr))\"
 mat_name \"[a-zA-Z_][a-zA-Z0-9_]*\"
 
 %%
@@ -28,15 +28,15 @@ mat_name \"[a-zA-Z_][a-zA-Z0-9_]*\"
 %}
 
 [ \t]               { ; }
-{num}               { yylval->build<float>(std::atof(yytext));   YIELD_TOKEN(NUM); }
+{num}               { yylval->build<float>(std::atof(yytext)); YIELD_TOKEN(NUM); }
 {texture}           { yylval->build<std::string>(std::string(yytext, yyleng)); YIELD_TOKEN(TEX); }
 {mat_name}          { yylval->build<std::string>(std::string(yytext, yyleng)); YIELD_TOKEN(MAT); }
-"diffuse"           { yylval->build<BxdfType>(DIFFUSE);          YIELD_TOKEN(BXDF_TYPE); }
-"conductor"         { yylval->build<BxdfType>(CONDUCTOR);        YIELD_TOKEN(BXDF_TYPE); }
-"roughConductor"    { yylval->build<BxdfType>(ROUGH_CONDUCTOR);  YIELD_TOKEN(BXDF_TYPE); }
-"dielectric"        { yylval->build<BxdfType>(DIELECTRIC);       YIELD_TOKEN(BXDF_TYPE); }
-"roughDielectric"   { yylval->build<BxdfType>(ROUGH_DIELECTRIC); YIELD_TOKEN(BXDF_TYPE); }
-"emissive"          { yylval->build<BxdfType>(EMISSIVE);         YIELD_TOKEN(BXDF_TYPE); }
+"diffuse"           { yylval->build<bxdf::Type>(bxdf::DIFFUSE);          YIELD_TOKEN(BXDF_TYPE); }
+"conductor"         { yylval->build<bxdf::Type>(bxdf::CONDUCTOR);        YIELD_TOKEN(BXDF_TYPE); }
+"roughConductor"    { yylval->build<bxdf::Type>(bxdf::ROUGH_CONDUCTOR);  YIELD_TOKEN(BXDF_TYPE); }
+"dielectric"        { yylval->build<bxdf::Type>(bxdf::DIELECTRIC);       YIELD_TOKEN(BXDF_TYPE); }
+"roughDielectric"   { yylval->build<bxdf::Type>(bxdf::ROUGH_DIELECTRIC); YIELD_TOKEN(BXDF_TYPE); }
+"emissive"          { yylval->build<bxdf::Type>(bxdf::EMISSIVE);         YIELD_TOKEN(BXDF_TYPE); }
 "mix"               { YIELD_TOKEN(MIX); }
 "mixMap"            { YIELD_TOKEN(MMAP); }
 "bumpMap"           { YIELD_TOKEN(BMAP); }

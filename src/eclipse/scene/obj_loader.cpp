@@ -136,57 +136,57 @@ std::string Material::get_expression()
     bool is_specular_reflection = max_component(Ks) > 0.0f || !Ks_tex.empty();
     bool is_emissive = max_component(Ke) > 0.0f || !Ke_tex.empty();
 
-    material::BxdfType bxdf;
+    material::bxdf::Type bxdf;
     std::vector<std::string> expr_args;
 
     if (is_specular_reflection && Ni == 0.0f)
     {
-        bxdf = material::CONDUCTOR;
+        bxdf = material::bxdf::CONDUCTOR;
         if (!Ks_tex.empty())
-            expr_args.push_back(std::string(material::param::Specularity) + ": " + Ks_tex);
+            expr_args.push_back(std::string(material::bxdf::param::Specularity) + ": " + Ks_tex);
         else if (max_component(Ks) > 0.0f)
-            expr_args.push_back(std::string(material::param::Specularity) + ": " + to_string(Ks));
+            expr_args.push_back(std::string(material::bxdf::param::Specularity) + ": " + to_string(Ks));
     }
     else if (is_specular_reflection && Ni != 0.0f)
     {
-        bxdf = material::DIELECTRIC;
+        bxdf = material::bxdf::DIELECTRIC;
         if (!Ks_tex.empty())
-            expr_args.push_back(std::string(material::param::Specularity) + ": " + Ks_tex);
+            expr_args.push_back(std::string(material::bxdf::param::Specularity) + ": " + Ks_tex);
         else if (max_component(Ks) > 0.0f)
-            expr_args.push_back(std::string(material::param::Specularity) + ": " + to_string(Ks));
+            expr_args.push_back(std::string(material::bxdf::param::Specularity) + ": " + to_string(Ks));
 
         if (!Tf_tex.empty())
-            expr_args.push_back(std::string(material::param::Transmittance) + ": " + Tf_tex);
+            expr_args.push_back(std::string(material::bxdf::param::Transmittance) + ": " + Tf_tex);
         else if (max_component(Tf) > 0.0f)
-            expr_args.push_back(std::string(material::param::Transmittance) + ": " + to_string(Tf));
+            expr_args.push_back(std::string(material::bxdf::param::Transmittance) + ": " + to_string(Tf));
 
-        expr_args.push_back(std::string(material::param::IntIOR) + ": " + std::to_string(Ni));
+        expr_args.push_back(std::string(material::bxdf::param::IntIOR) + ": " + std::to_string(Ni));
     }
     else if (is_emissive)
     {
-        bxdf = material::EMISSIVE;
+        bxdf = material::bxdf::EMISSIVE;
         if (!Ke_tex.empty())
-            expr_args.push_back(std::string(material::param::Radiance) + ": " + Ke_tex);
+            expr_args.push_back(std::string(material::bxdf::param::Radiance) + ": " + Ke_tex);
         else if (max_component(Ke) > 0.0f)
-            expr_args.push_back(std::string(material::param::Radiance) + ": " + to_string(Ke));
+            expr_args.push_back(std::string(material::bxdf::param::Radiance) + ": " + to_string(Ke));
 
         if (Ke_scaler != 0.0f)
-            expr_args.push_back(std::string(material::param::Scale) + ": " + std::to_string(Ke_scaler));
+            expr_args.push_back(std::string(material::bxdf::param::Scale) + ": " + std::to_string(Ke_scaler));
     }
     else
     {
-        bxdf = material::DIFFUSE;
+        bxdf = material::bxdf::DIFFUSE;
         if (!Kd_tex.empty())
-            expr_args.push_back(std::string(material::param::Reflectance) + ": " + Kd_tex);
+            expr_args.push_back(std::string(material::bxdf::param::Reflectance) + ": " + Kd_tex);
         else if (max_component(Kd) > 0.0f)
-            expr_args.push_back(std::string(material::param::Reflectance) + ": " + to_string(Kd));
+            expr_args.push_back(std::string(material::bxdf::param::Reflectance) + ": " + to_string(Kd));
     }
 
     std::string joined_expr_args;
     for (auto const& s : expr_args)
         joined_expr_args += ", " + s;
 
-    std::string expr = material::bxdf_to_string(bxdf) + "(" + joined_expr_args + ")";
+    std::string expr = material::bxdf::to_string(bxdf) + "(" + joined_expr_args + ")";
 
     if (!normal_tex.empty())
         expr = "normalMap(" + expr + ", " + normal_tex + ")";

@@ -2,12 +2,12 @@
 #include "eclipse/scene/scene.h"
 #include "eclipse/scene/raw_scene.h"
 #include "eclipse/scene/bvh_builder.h"
+#include "eclipse/scene/mat_expr.h"
 #include "eclipse/util/logger.h"
 #include "eclipse/util/stop_watch.h"
 #include "eclipse/math/vec3.h"
 #include "eclipse/math/vec4.h"
 #include "eclipse/math/bbox.h"
-#include "eclipse/scene/mat_expr.h"
 
 #include <memory>
 #include <map>
@@ -225,7 +225,12 @@ void create_layered_material_tree()
 // This method returns back the root material tree node index.
 int32_t generate_material(raw::MaterialPtr material)
 {
-    (void)material;
+    std::unique_ptr<material::NExpression> expr_node = material::parse_expr(material->expression);
+
+    std::string error = expr_node->validate();
+    if (!error.empty())
+        LOG_ERROR("Expression error for ", material->name, ": ", error);
+
     return 0;
 }
 
