@@ -14,20 +14,20 @@
 
 namespace eclipse { namespace material {
 
-std::unique_ptr<NExpression> parse_expr(const std::string& expr)
+std::unique_ptr<ExprNode> parse_expr(const std::string& expr, std::string& error)
 {
     class ParsedExpression : public ParserCallback
     {
     public:
-        void set(NExpression* expr) override
+        void set(ExprNode* expr) override
         {
-            expression = std::unique_ptr<NExpression>(expr);
+            expression = std::unique_ptr<ExprNode>(expr);
         }
-        std::unique_ptr<NExpression> get()
+        std::unique_ptr<ExprNode> get()
         {
             return std::move(expression);
         }
-        std::unique_ptr<NExpression> expression;
+        std::unique_ptr<ExprNode> expression;
     };
 
     ParsedExpression out;
@@ -38,20 +38,23 @@ std::unique_ptr<NExpression> parse_expr(const std::string& expr)
     try
     {
         if (parser.parse() != 0)
-            throw std::runtime_error("Unknown material expression parsing error");
+        {
+            error = "Unknown material expression parsing error";
+            return nullptr;
+        }
     }
     catch (MatExprSyntaxError& e)
     {
         int col = e.location.begin.column;
         int len = 1 + e.location.end.column - col;
-        std::string msg =
-            std::string(e.what()) + "\n" +
-            "in col " + std::to_string(col) + ":\n\n" +
-            "    " + expr + "\n" +
-            "    " + std::string(col-1, ' ') + std::string(len, '^');
-        throw MatExprSyntaxError(e.location, msg);
+        error = std::string(e.what()) + "\n" +
+                "in col " + std::to_string(col) + ":\n\n" +
+                "    " + expr + "\n" +
+                "    " + std::string(col-1, ' ') + std::string(len, '^');
+        return nullptr;
     }
 
+    error = "";
     return std::move(out.get());
 }
 
@@ -69,97 +72,89 @@ std::string validate_known_ior_name(const std::string& name)
     return "";
 }
 
-namespace bxdf {
-
-    std::string to_string(Type bxdf)
+std::string bxdf_to_string(BxdfType bxdf)
+{
+    switch (bxdf)
     {
-        switch (bxdf)
-        {
-            case EMISSIVE:         return "emissive";
-            case DIFFUSE:          return "diffuse";
-            case CONDUCTOR:        return "conductor";
-            case ROUGH_CONDUCTOR:  return "roughConductor";
-            case DIELECTRIC:       return "dielectric";
-            case ROUGH_DIELECTRIC: return "roughDielectric";
-            default:               return "invalid";
-        }
+    case EMISSIVE:         return "emissive";
+    case DIFFUSE:          return "diffuse";
+    case CONDUCTOR:        return "conductor";
+    case ROUGH_CONDUCTOR:  return "roughConductor";
+    case DIELECTRIC:       return "dielectric";
+    case ROUGH_DIELECTRIC: return "roughDielectric";
+    default:               return "invalid";
     }
+}
 
-    namespace param {
+std::string bxdf_param_to_string(ParamType param)
+{
+    switch (param)
+    {
+    case REFLECTANCE:   return "reflectance";
+    case SPECULARITY:   return "specularity";
+    case TRANSMITTANCE: return "transmittance";
+    case RADIANCE:      return "radiance";
+    case INT_IOR:       return "intIOR";
+    case EXT_IOR:       return "extIOR";
+    case SCALER:        return "scaler";
+    case ROUGHNESS:     return "roughness";
+    default:            return "invalid";
+    }
+}
 
-        std::string to_string(bxdf::param::Type param)
-        {
-            switch (param)
-            {
-                case REFLECTANCE:   return "reflectance";
-                case SPECULARITY:   return "specularity";
-                case TRANSMITTANCE: return "transmittance";
-                case RADIANCE:      return "radiance";
-                case INT_IOR:       return "intIOR";
-                case EXT_IOR:       return "extIOR";
-                case SCALE:         return "scale";
-                case ROUGHNESS:     return "roughness";
-                default:            return "invalid";
-            }
-        }
+ParamValue ParamValue::num(float v)
+{
+    return { NUM, Vec3(v, 0, 0), "" };
+}
 
-        Value Value::num(float v)
-        {
-            return { NUM, Vec3(v, 0, 0), "" };
-        }
+ParamValue ParamValue::vec3(float x, float y, float z)
+{
+    return { VECTOR, Vec3(x, y, z), "" };
+}
 
-        Value Value::vec3(float x, float y, float z)
-        {
-            return { VECTOR, Vec3(x, y, z), "" };
-        }
+ParamValue ParamValue::texture(std::string name)
+{
+    return { TEXTURE, Vec3(0, 0, 0), std::move(name) };
+}
 
-        Value Value::texture(std::string name)
-        {
-            return { TEXTURE, Vec3(0, 0, 0), std::move(name) };
-        }
+ParamValue ParamValue::known_ior(std::string name)
+{
+    return { KNOWN_IOR, Vec3(0, 0, 0), std::move(name) };
+}
 
-        Value Value::known_ior(std::string name)
-        {
-            return { KNOWN_IOR, Vec3(0, 0, 0), std::move(name) };
-        }
-
-        std::string Value::validate() const
-        {
-            if (type == TEXTURE)
-                return validate_texture_name(name);
-            else if (type == KNOWN_IOR)
-                return validate_known_ior_name(name);
-            return "";
-        }
-
-} } // namespace bxdf::param
+std::string ParamValue::validate() const
+{
+    if (type == TEXTURE)
+        return validate_texture_name(name);
+    else if (type == KNOWN_IOR)
+        return validate_known_ior_name(name);
+    return "";
+}
 
 std::string NBxdfParam::validate() const
 {
     switch (type)
     {
-    case bxdf::param::INVALID:
+    case INVALID_PARAM:
         return "Invalid BXDF type";
-    case bxdf::param::REFLECTANCE:
-        if (value.type == bxdf::param::VECTOR &&
-                (value.value[0] >= 1.0f || value.value[1] >= 1.0f || value.value[2] >= 1.0f))
-            return "Energy conservation violation for parameter " + bxdf::param::to_string(type) +
+    case REFLECTANCE:
+        if (value.type == VECTOR && (value.vec[0] >= 1.0f || value.vec[1] >= 1.0f || value.vec[2] >= 1.0f))
+            return "Energy conservation violation for parameter " + bxdf_param_to_string(type) +
                    "; ensure that all vector components are < 1.0";
         break;
-    case bxdf::param::SPECULARITY:
-    case bxdf::param::TRANSMITTANCE:
-        if (value.type == bxdf::param::VECTOR &&
-                (value.value[0] >= 1.0f || value.value[1] >= 1.0f || value.value[2] >= 1.0f))
-            return "Energy conservation violation for parameter " + bxdf::param::to_string(type) +
+    case SPECULARITY:
+    case TRANSMITTANCE:
+        if (value.type == VECTOR && (value.vec[0] >= 1.0f || value.vec[1] >= 1.0f || value.vec[2] >= 1.0f))
+            return "Energy conservation violation for parameter " + bxdf_param_to_string(type) +
                    "; ensure that all vector components are < 1.0";
         break;
-    case bxdf::param::ROUGHNESS:
-        if (value.type == bxdf::param::NUM && (value.value[0] < 0.0f || value.value[0] > 1.0f))
-            return "Values for parameter " + bxdf::param::to_string(type) + " must be in the [0, 1] range";
+    case ROUGHNESS:
+        if (value.type == NUM && (value.vec[0] < 0.0f || value.vec[0] > 1.0f))
+            return "Values for parameter " + bxdf_param_to_string(type) + " must be in the [0, 1] range";
         break;
-    case bxdf::param::INT_IOR:
-    case bxdf::param::EXT_IOR:
-        if (value.type == bxdf::param::KNOWN_IOR)
+    case INT_IOR:
+    case EXT_IOR:
+        if (value.type == KNOWN_IOR)
         {
             std::string error;
             get_known_ior(value.name, error);
@@ -167,54 +162,52 @@ std::string NBxdfParam::validate() const
                 return error;
         }
         break;
-    case bxdf::param::RADIANCE:
-        break;
-    case bxdf::param::SCALE:
+    default:
         break;
     }
     return value.validate();
 }
 
-NBxdf::NBxdf(bxdf::Type type, NBxdfParamList params)
+NBxdf::NBxdf(BxdfType type, NBxdfParamList params)
         : type(type), parameters(std::move(params))
 {
 }
 
-std::map<bxdf::Type, std::vector<bxdf::param::Type>> allowed_bxdf_params =
+std::map<BxdfType, std::vector<ParamType>> allowed_bxdf_params =
 {
-    { bxdf::INVALID,          {                             } },
-    { bxdf::DIFFUSE,          { bxdf::param::REFLECTANCE    } },
-    { bxdf::EMISSIVE,         { bxdf::param::RADIANCE,
-                                bxdf::param::SCALE          } },
-    { bxdf::CONDUCTOR,        { bxdf::param::SPECULARITY,
-                                bxdf::param::INT_IOR,
-                                bxdf::param::EXT_IOR        } },
-    { bxdf::ROUGH_CONDUCTOR,  { bxdf::param::SPECULARITY,
-                                bxdf::param::INT_IOR,
-                                bxdf::param::EXT_IOR,
-                                bxdf::param::ROUGHNESS      } },
-    { bxdf::DIELECTRIC,       { bxdf::param::SPECULARITY,
-                                bxdf::param::TRANSMITTANCE,
-                                bxdf::param::INT_IOR,
-                                bxdf::param::EXT_IOR        } },
-    { bxdf::ROUGH_DIELECTRIC, { bxdf::param::SPECULARITY,
-                                bxdf::param::TRANSMITTANCE,
-                                bxdf::param::INT_IOR,
-                                bxdf::param::EXT_IOR,
-                                bxdf::param::ROUGHNESS      } }
+    { INVALID_BXDF,     {                } },
+    { DIFFUSE,          { REFLECTANCE    } },
+    { EMISSIVE,         { RADIANCE,
+                          SCALER         } },
+    { CONDUCTOR,        { SPECULARITY,
+                          INT_IOR,
+                          EXT_IOR        } },
+    { ROUGH_CONDUCTOR,  { SPECULARITY,
+                          INT_IOR,
+                          EXT_IOR,
+                          ROUGHNESS      } },
+    { DIELECTRIC,       { SPECULARITY,
+                          TRANSMITTANCE,
+                          INT_IOR,
+                          EXT_IOR        } },
+    { ROUGH_DIELECTRIC, { SPECULARITY,
+                          TRANSMITTANCE,
+                          INT_IOR,
+                          EXT_IOR,
+                          ROUGHNESS      } }
 };
 
 std::string NBxdf::validate() const
 {
-    if (type == bxdf::INVALID)
+    if (type == INVALID_BXDF)
         return "Invalid BXDF type";
 
     for (auto& param : parameters)
     {
         auto map_it = allowed_bxdf_params.find(type);
-        std::vector<bxdf::param::Type>& allowed_params = map_it->second;
+        std::vector<ParamType>& allowed_params = map_it->second;
         if (std::find(allowed_params.begin(), allowed_params.end(), param.type) == allowed_params.end())
-            return "Bxdf type " + bxdf::to_string(type) + " does not support parameter " + bxdf::param::to_string(param.type);
+            return "Bxdf type " + bxdf_to_string(type) + " does not support parameter " + bxdf_param_to_string(param.type);
 
         std::string error = param.validate();
         if (!error.empty())
@@ -235,8 +228,8 @@ std::string NMatRef::validate() const
     return "";
 }
 
-NMix::NMix(NExpression* left, NExpression* right, float w)
-    : expressions{ std::unique_ptr<NExpression>(left), std::unique_ptr<NExpression>(right) }
+NMix::NMix(ExprNode* left, ExprNode* right, float w)
+    : expressions{ std::unique_ptr<ExprNode>(left), std::unique_ptr<ExprNode>(right) }
     , weight(w)
 {
 }
@@ -261,8 +254,8 @@ std::string NMix::validate() const
     return "";
 }
 
-NMixMap::NMixMap(NExpression* left, NExpression* right, bxdf::param::Value tex)
-    : expressions{ std::unique_ptr<NExpression>(left), std::unique_ptr<NExpression>(right) }
+NMixMap::NMixMap(ExprNode* left, ExprNode* right, ParamValue tex)
+    : expressions{ std::unique_ptr<ExprNode>(left), std::unique_ptr<ExprNode>(right) }
     , texture(tex.name)
 {
 }
@@ -288,7 +281,7 @@ std::string NMixMap::validate() const
     return error;
 }
 
-NBumpMap::NBumpMap(NExpression* expr, bxdf::param::Value tex)
+NBumpMap::NBumpMap(ExprNode* expr, ParamValue tex)
     : expression(expr), texture(tex.name)
 {
 }
@@ -308,7 +301,7 @@ std::string NBumpMap::validate() const
     return error;
 }
 
-NNormalMap::NNormalMap(NExpression* expr, bxdf::param::Value tex)
+NNormalMap::NNormalMap(ExprNode* expr, ParamValue tex)
     : expression(expr), texture(tex.name)
 {
 }
@@ -328,8 +321,8 @@ std::string NNormalMap::validate() const
     return error;
 }
 
-NDisperse::NDisperse(NExpression* expr, bxdf::param::Value iior, bxdf::param::Value eior)
-    : expression(expr), int_ior(iior.value), ext_ior(eior.value)
+NDisperse::NDisperse(ExprNode* expr, ParamValue iior, ParamValue eior)
+    : expression(expr), int_ior(iior.vec), ext_ior(eior.vec)
 {
 }
 
@@ -347,36 +340,6 @@ std::string NDisperse::validate() const
         return "Disperse: at least one of the intIOR and extIOR parameters must contain a non-zero value";
     }
     return error;
-}
-
-void test_expr_parser()
-{
-    const char* expressions[] = {
-    	"diffuse()",
-		"emissive()",
-		"emissive(scale: 10)",
-		"diffuse(reflectance: {0.9, 0.9, 0.9})",
-		"diffuse(reflectance: \"texture.jpEg\")",
-		"conductor(specularity: \"texture.jpg\")",
-		"emissive(radiance: {1,1,1}, scale: 10)",
-		"bumpMap(conductor(specularity: \"texture.jpg\"), \"foo.jpg\")",
-		"normalMap(conductor(specularity: \"texture.jpg\"), \"foo.jpg\")",
-		"roughConductor(specularity: {.3,.3,.3}, intIOR: \"gold\", roughness: 1)",
-		"dielectric(specularity: \"texture.jpg\", intIOR: \"gold\", extIOR: \"air\")",
-		"mix(diffuse(reflectance:{0.2, 0.2, 0.2}), conductor(specularity: \"texture.jpg\"), 0.2)",
-		"dielectric(specularity: \"texture.jpEg\", transmittance: {.9,.9,.9}, intIOR: 1.33, extIOR: \"air\")",
-		"roughDielectric(specularity: \"texture.jpEg\", transmittance: {1,1,1}, intIOR: 1.33, extIOR: \"air\", roughness: 0.2)",
-    };
-
-    const unsigned num = sizeof(expressions) / sizeof(expressions[0]);
-
-    LOG_INFO("Tesing ", num, " expressions");
-
-    for (unsigned i = 0; i < num; ++i)
-    {
-        LOG_INFO("#", i, ": ", expressions[i]);
-        std::unique_ptr<NExpression> expr = parse_expr(expressions[i]);
-    }
 }
 
 } } // namespace eclipse::material

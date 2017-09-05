@@ -7,7 +7,7 @@
 
 namespace eclipse {
 
-class Vec3
+class __packed Vec3
 {
 public:
     inline Vec3(float x = 0.0f, float y = 0.0f, float z = 0.0f)
@@ -17,6 +17,11 @@ public:
 
     inline Vec3(const Vec3& o)
         : x(o.x), y(o.y), z(o.z)
+    {
+    }
+
+    inline Vec3(const float v[3])
+        : x(v[0]), y(v[1]), z(v[2])
     {
     }
 

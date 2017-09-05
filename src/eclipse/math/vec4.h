@@ -6,7 +6,7 @@
 
 namespace eclipse {
 
-class Vec4
+class __packed Vec4
 {
 public:
     inline Vec4(float x = 0.0f, float y = 0.0f, float z = 0.0f, float w = 0.0f)

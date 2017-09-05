@@ -8,107 +8,101 @@
 
 namespace eclipse { namespace material {
 
-class NExpression
+class ExprNode
 {
 public:
-    virtual ~NExpression() { }
+    virtual ~ExprNode() { }
     virtual std::string validate() const { return ""; }
 };
 
-std::unique_ptr<NExpression> parse_expr(const std::string& expr);
+std::unique_ptr<ExprNode> parse_expr(const std::string& expr, std::string& error);
 
-namespace bxdf {
+typedef std::shared_ptr<ExprNode> ExprNodePtr;
 
-    enum Type
-    {
-        INVALID = 0,
-        DIFFUSE,
-        CONDUCTOR,
-        ROUGH_CONDUCTOR,
-        DIELECTRIC,
-        ROUGH_DIELECTRIC,
-        EMISSIVE
-    };
+enum BxdfType
+{
+    INVALID_BXDF = 0,
+    DIFFUSE,
+    CONDUCTOR,
+    ROUGH_CONDUCTOR,
+    DIELECTRIC,
+    ROUGH_DIELECTRIC,
+    EMISSIVE
+};
 
-    std::string to_string(bxdf::Type bxdf);
+std::string bxdf_to_string(BxdfType bxdf);
 
-    namespace param {
+enum ParamType
+{
+    INVALID_PARAM = 0,
+    REFLECTANCE,
+    SPECULARITY,
+    TRANSMITTANCE,
+    RADIANCE,
+    INT_IOR,
+    EXT_IOR,
+    SCALER,
+    ROUGHNESS
+};
 
-        enum Type
-        {
-            INVALID = 0,
-            REFLECTANCE,
-            SPECULARITY,
-            TRANSMITTANCE,
-            RADIANCE,
-            INT_IOR,
-            EXT_IOR,
-            SCALE,
-            ROUGHNESS
-        };
+std::string param_to_string(ParamType param);
 
-        std::string to_string(bxdf::param::Type param);
+enum ParamValueType
+{
+    NUM = 0,
+    VECTOR,
+    TEXTURE,
+    KNOWN_IOR
+};
 
-        enum ValueType
-        {
-            NUM = 0,
-            VECTOR,
-            TEXTURE,
-            KNOWN_IOR
-        };
+constexpr char Reflectance[]   = "reflectance";
+constexpr char Specularity[]   = "specularity";
+constexpr char Transmittance[] = "transmittance";
+constexpr char Radiance[]      = "radiance";
+constexpr char IntIOR[]        = "intIOR";
+constexpr char ExtIOR[]        = "extIOR";
+constexpr char Scale[]         = "scale";
+constexpr char Roughness[]     = "roughness";
 
-        constexpr char Reflectance[]   = "reflectance";
-        constexpr char Specularity[]   = "specularity";
-        constexpr char Transmittance[] = "transmittance";
-        constexpr char Radiance[]      = "radiance";
-        constexpr char IntIOR[]        = "intIOR";
-        constexpr char ExtIOR[]        = "extIOR";
-        constexpr char Scale[]         = "scale";
-        constexpr char Roughness[]     = "roughness";
+struct ParamValue
+{
+    ParamValueType type;
+    Vec3 vec;
+    std::string name;
 
-        struct Value
-        {
-            ValueType type;
-            Vec3 value;
-            std::string name;
+    std::string validate() const;
 
-            std::string validate() const;
-
-            static Value num(float v);
-            static Value vec3(float x, float y, float z);
-            static Value texture(std::string name);
-            static Value known_ior(std::string name);
-        };
-
-    } // namespace param
-
-} // namespace bxdf
+    static ParamValue num(float v);
+    static ParamValue vec3(float x, float y, float z);
+    static ParamValue texture(std::string name);
+    static ParamValue known_ior(std::string name);
+};
 
 struct NBxdfParam
 {
-    bxdf::param::Type type;
-    bxdf::param::Value value;
+    ParamType type;
+    ParamValue value;
 
     std::string validate() const;
 };
 
 typedef std::vector<NBxdfParam> NBxdfParamList;
 
-class NOperation : public NExpression
+class OpNode : public ExprNode
 {
 };
 
-class NBxdf : public NExpression
+class NBxdf : public ExprNode
 {
 public:
-    bxdf::Type type;
+    BxdfType type;
     NBxdfParamList parameters;
 
-    explicit NBxdf(bxdf::Type type, NBxdfParamList params = { });
+    explicit NBxdf(BxdfType type, NBxdfParamList params = { });
     std::string validate() const override;
 };
 
-class NMatRef : public NExpression
+class NMatRef : public ExprNode
 {
 public:
     std::string name;
@@ -117,54 +111,54 @@ public:
     std::string validate() const override;
 };
 
-class NMix : public NOperation
+class NMix : public OpNode
 {
 public:
-    std::unique_ptr<NExpression> expressions[2];
+    std::unique_ptr<ExprNode> expressions[2];
     float weight;
 
-    explicit NMix(NExpression* left, NExpression* right, float w);
+    explicit NMix(ExprNode* left, ExprNode* right, float w);
     std::string validate() const override;
 };
 
-class NMixMap : public NOperation
+class NMixMap : public OpNode
 {
 public:
-    std::unique_ptr<NExpression> expressions[2];
+    std::unique_ptr<ExprNode> expressions[2];
     std::string texture;
 
-    explicit NMixMap(NExpression* left, NExpression* right, bxdf::param::Value tex);
+    explicit NMixMap(ExprNode* left, ExprNode* right, ParamValue tex);
     std::string validate() const override;
 };
 
-class NBumpMap : public NOperation
+class NBumpMap : public OpNode
 {
 public:
-    std::unique_ptr<NExpression> expression;
+    std::unique_ptr<ExprNode> expression;
     std::string texture;
 
-    explicit NBumpMap(NExpression* expr, bxdf::param::Value tex);
+    explicit NBumpMap(ExprNode* expr, ParamValue tex);
     std::string validate() const override;
 };
 
-class NNormalMap : public NOperation
+class NNormalMap : public OpNode
 {
 public:
-    std::unique_ptr<NExpression> expression;
+    std::unique_ptr<ExprNode> expression;
     std::string texture;
 
-    explicit NNormalMap(NExpression* expr, bxdf::param::Value tex);
+    explicit NNormalMap(ExprNode* expr, ParamValue tex);
     std::string validate() const override;
 };
 
-class NDisperse : public NOperation
+class NDisperse : public OpNode
 {
 public:
-    std::unique_ptr<NExpression> expression;
+    std::unique_ptr<ExprNode> expression;
     Vec3 int_ior;
     Vec3 ext_ior;
 
-    explicit NDisperse(NExpression* expr, bxdf::param::Value iior, bxdf::param::Value eior);
+    explicit NDisperse(ExprNode* expr, ParamValue iior, ParamValue eior);
     std::string validate() const override;
 };
 

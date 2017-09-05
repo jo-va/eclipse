@@ -14,6 +14,7 @@ set(SCENE_HEADERS scene.h
                   resource.h
                   raw_scene.h
                   obj_loader.h
+                  material_node.h
                   compiler.h
                   bvh_node.h
                   bvh_builder.h
@@ -23,6 +24,7 @@ set(SCENE_HEADERS scene.h
 
 set(SCENE_SOURCES resource.cpp
                   obj_loader.cpp
+                  material_node.cpp
                   compiler.cpp
                   known_ior.cpp
                   mat_expr.cpp

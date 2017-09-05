@@ -9,7 +9,7 @@
 
 namespace eclipse {
 
-struct Mat4
+struct __packed Mat4
 {
     float m[4][4];
 

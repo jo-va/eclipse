@@ -24,7 +24,7 @@
         class MatExprScanner;
 
         struct ParserCallback {
-            virtual void set(NExpression* expression) = 0;
+            virtual void set(ExprNode* expression) = 0;
         };
     } }
 }
@@ -48,16 +48,16 @@
 }
 
 %token                      END 0 "end of file"
-%token <bxdf::Type>         BXDF_TYPE
+%token <BxdfType>           BXDF_TYPE
 %token <std::string>        TEX MAT
 %token <float>              NUM
 %token                      MIX MMAP BMAP NMAP DISP
-%token                      REFLECTANCE SPECULARITY TRANSMITTANCE RADIANCE IIOR EIOR SCALE ROUGHNESS
+%token                      REFLECTANCE SPECULARITY TRANSMITTANCE RADIANCE IIOR EIOR SCALER ROUGHNESS
 
-%type <NExpression*>        bxdf bxdf_op bxdf_any
+%type <ExprNode*>           bxdf bxdf_op bxdf_any
 %type <NBxdfParamList>      param_list
 %type <NBxdfParam>          param
-%type <bxdf::param::Value>  f_or_mat f_or_tex f3_or_tex f3
+%type <ParamValue>          f_or_mat f_or_tex f3_or_tex f3
 
 %start mat_def
 
@@ -75,35 +75,35 @@ param_list  : %empty                        { $$ = { }; }
             | param_list ',' param          { $1.push_back(std::move($3)); $$ = std::move($1); }
             ;
 
-param       : REFLECTANCE   ':' f3_or_tex   { $$ = { bxdf::param::REFLECTANCE, $3 }; }
-            | SPECULARITY   ':' f3_or_tex   { $$ = { bxdf::param::SPECULARITY, $3 }; }
-            | TRANSMITTANCE ':' f3_or_tex   { $$ = { bxdf::param::TRANSMITTANCE, $3 }; }
-            | RADIANCE      ':' f3_or_tex   { $$ = { bxdf::param::RADIANCE, $3 }; }
-            | IIOR          ':' f_or_mat    { $$ = { bxdf::param::INT_IOR, $3 }; }
-            | EIOR          ':' f_or_mat    { $$ = { bxdf::param::EXT_IOR, $3 }; }
-            | SCALE         ':' NUM         { $$ = { bxdf::param::SCALE, bxdf::param::Value::num($3) }; }
-            | ROUGHNESS     ':' f_or_tex    { $$ = { bxdf::param::ROUGHNESS, $3 }; }
+param       : REFLECTANCE   ':' f3_or_tex   { $$ = { REFLECTANCE, $3 }; }
+            | SPECULARITY   ':' f3_or_tex   { $$ = { SPECULARITY, $3 }; }
+            | TRANSMITTANCE ':' f3_or_tex   { $$ = { TRANSMITTANCE, $3 }; }
+            | RADIANCE      ':' f3_or_tex   { $$ = { RADIANCE, $3 }; }
+            | IIOR          ':' f_or_mat    { $$ = { INT_IOR, $3 }; }
+            | EIOR          ':' f_or_mat    { $$ = { EXT_IOR, $3 }; }
+            | SCALER        ':' NUM         { $$ = { SCALER, ParamValue::num($3) }; }
+            | ROUGHNESS     ':' f_or_tex    { $$ = { ROUGHNESS, $3 }; }
             ;
 
-f_or_mat    : NUM                           { $$ = bxdf::param::Value::num($1); }
-            | MAT                           { $$ = bxdf::param::Value::known_ior(unquote($1)); }
+f_or_mat    : NUM                           { $$ = ParamValue::num($1); }
+            | MAT                           { $$ = ParamValue::known_ior(unquote($1)); }
             ;
 
-f_or_tex    : NUM                           { $$ = bxdf::param::Value::num($1); }
-            | TEX                           { $$ = bxdf::param::Value::texture(unquote($1)); }
+f_or_tex    : NUM                           { $$ = ParamValue::num($1); }
+            | TEX                           { $$ = ParamValue::texture(unquote($1)); }
             ;
 
 f3_or_tex   : f3                            { $$ = $1; }
-            | TEX                           { $$ = bxdf::param::Value::texture(unquote($1)); }
+            | TEX                           { $$ = ParamValue::texture(unquote($1)); }
             ;
 
-f3          : '{' NUM ',' NUM ',' NUM '}'   { $$ = bxdf::param::Value::vec3($2, $4, $6); }
+f3          : '{' NUM ',' NUM ',' NUM '}'   { $$ = ParamValue::vec3($2, $4, $6); }
             ;
 
 bxdf_op     : MIX  '(' bxdf_any ',' bxdf_any ',' NUM ')' { $$ = new NMix($3, $5, $7); }
-            | MMAP '(' bxdf_any ',' bxdf_any ',' TEX ')' { $$ = new NMixMap($3, $5, bxdf::param::Value::texture(unquote($7))); }
-            | BMAP '(' bxdf_any ',' TEX ')'              { $$ = new NBumpMap($3, bxdf::param::Value::texture(unquote($5))); }
-            | NMAP '(' bxdf_any ',' TEX ')'              { $$ = new NNormalMap($3, bxdf::param::Value::texture(unquote($5))); }
+            | MMAP '(' bxdf_any ',' bxdf_any ',' TEX ')' { $$ = new NMixMap($3, $5, ParamValue::texture(unquote($7))); }
+            | BMAP '(' bxdf_any ',' TEX ')'              { $$ = new NBumpMap($3, ParamValue::texture(unquote($5))); }
+            | NMAP '(' bxdf_any ',' TEX ')'              { $$ = new NNormalMap($3, ParamValue::texture(unquote($5))); }
             | DISP '(' bxdf_any ',' IIOR ':' f3 ',' EIOR ':' f3 ')' { $$ = new NDisperse($3, $7, $11); }
             ;
 

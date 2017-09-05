@@ -3,6 +3,7 @@
 #include "eclipse/scene/raw_scene.h"
 #include "eclipse/scene/bvh_builder.h"
 #include "eclipse/scene/mat_expr.h"
+#include "eclipse/scene/known_ior.h"
 #include "eclipse/util/logger.h"
 #include "eclipse/util/stop_watch.h"
 #include "eclipse/math/vec3.h"
@@ -11,6 +12,7 @@
 
 #include <memory>
 #include <map>
+#include <cstring>
 
 namespace eclipse { namespace scene {
 
@@ -18,6 +20,8 @@ namespace {
 
 void create_layered_material_tree();
 int32_t generate_material(raw::MaterialPtr material);
+int32_t generate_material_tree(raw::MaterialPtr material, material::ExprNodePtr expr_node);
+int32_t bake_texture(raw::MaterialPtr material, const std::string& texture);
 void partition_geometry();
 void setup_camera();
 
@@ -26,6 +30,9 @@ std::unique_ptr<Scene> g_scene;
 
 // A map of material indices to their layered material tree roots
 std::map<uint32_t, int32_t> g_mat_index_to_mat_root;
+
+// A list of material references for detecting circular loops
+std::vector<std::string> g_mat_ref_list;
 
 } // anonymous namespace
 
@@ -225,13 +232,133 @@ void create_layered_material_tree()
 // This method returns back the root material tree node index.
 int32_t generate_material(raw::MaterialPtr material)
 {
-    std::unique_ptr<material::NExpression> expr_node = material::parse_expr(material->expression);
+    std::string error;
+    material::ExprNodePtr expr_node = material::parse_expr(material->expression, error);
+    if (!expr_node)
+    {
+        LOG_ERROR("Expression error for material '", material->name, "': ", error);
+        return -1;
+    }
 
-    std::string error = expr_node->validate();
+    error = expr_node->validate();
     if (!error.empty())
-        LOG_ERROR("Expression error for ", material->name, ": ", error);
+    {
+        LOG_ERROR("Expression error for material '", material->name, "': ", error);
+        return -1;
+    }
 
-    return 0;
+    g_mat_ref_list.push_back(material->name);
+
+    // Create material node tree and store its root index
+    return generate_material_tree(material, expr_node);
+}
+
+// Recursively construct an optimized material tree from the given expression.
+// Return the index of the tree root in the scene's material node list.
+int32_t generate_material_tree(raw::MaterialPtr material, material::ExprNodePtr expr_node)
+{
+    MaterialNode node;
+
+    std::string error;
+    float int_ior = material::get_known_ior(std::string(defaults::IntIOR), error);
+    float ext_ior = material::get_known_ior(std::string(defaults::ExtIOR), error);
+
+    node.set_float(MaterialNode::INT_IOR, int_ior);
+    node.set_float(MaterialNode::EXT_IOR, ext_ior);
+
+    if (auto mat_ref_node = std::dynamic_pointer_cast<material::NMatRef>(expr_node))
+    {
+        for (auto& name : g_mat_ref_list)
+        {
+            if (mat_ref_node->name == name)
+            {
+                std::string loop;
+                for (size_t i = 0; i < g_mat_ref_list.size() - 1; ++i)
+                    loop += g_mat_ref_list[i] + " => ";
+                loop += g_mat_ref_list[g_mat_ref_list.size() - 1];
+                LOG_ERROR("Detected circular dependency loop while processing ",
+                          g_mat_ref_list[0], "; ", loop, mat_ref_node->name);
+                return -1;
+            }
+        }
+
+        for (auto& mat : g_raw_scene->materials)
+        {
+            if (mat->name == mat_ref_node->name)
+                return generate_material(mat);
+        }
+
+        LOG_ERROR("Material ", material->name, " references undefined material ", mat_ref_node->name);
+        return -1;
+    }
+    else if (auto bxdf_node = std::dynamic_pointer_cast<material::NBxdf>(expr_node))
+    {
+
+        if (bxdf_node->type == material::DIFFUSE)
+        {
+            node.set_type(MaterialNode::DIFFUSE);
+            node.set_vec3(MaterialNode::REFLECTANCE, Vec3(defaults::Reflectance));
+        }
+        else if (bxdf_node->type == material::CONDUCTOR)
+        {
+            node.set_type(MaterialNode::CONDUCTOR);
+            node.set_vec3(MaterialNode::SPECULARITY, Vec3(defaults::Specularity));
+        }
+        else if (bxdf_node->type == material::ROUGH_CONDUCTOR)
+        {
+            node.set_type(MaterialNode::ROUGH_CONDUCTOR);
+            node.set_vec3(MaterialNode::SPECULARITY, Vec3(defaults::Specularity));
+            node.set_float(MaterialNode::ROUGHNESS, defaults::Roughness);
+        }
+        else if (bxdf_node->type == material::DIELECTRIC)
+        {
+            node.set_type(MaterialNode::DIELECTRIC);
+            node.set_vec3(MaterialNode::SPECULARITY, Vec3(defaults::Specularity));
+            node.set_vec3(MaterialNode::TRANSMITTANCE, Vec3(defaults::Transmittance));
+        }
+        else if (bxdf_node->type == material::ROUGH_DIELECTRIC)
+        {
+            node.set_type(MaterialNode::ROUGH_DIELECTRIC);
+            node.set_vec3(MaterialNode::SPECULARITY, Vec3(defaults::Specularity));
+            node.set_vec3(MaterialNode::TRANSMITTANCE, Vec3(defaults::Transmittance));
+            node.set_float(MaterialNode::ROUGHNESS, defaults::Roughness);
+        }
+        else if (bxdf_node->type == material::EMISSIVE)
+        {
+            node.set_type(MaterialNode::EMISSIVE);
+            node.set_vec3(MaterialNode::RADIANCE, Vec3(defaults::Radiance));
+            node.set_float(MaterialNode::SCALER, defaults::RadianceScaler);
+        }
+    }
+    else if (auto mix_node = std::dynamic_pointer_cast<material::NMix>(expr_node))
+    {
+
+    }
+    else if (auto mix_map_node = std::dynamic_pointer_cast<material::NMixMap>(expr_node))
+    {
+
+    }
+    else if (auto bump_map_node = std::dynamic_pointer_cast<material::NBumpMap>(expr_node))
+    {
+
+    }
+    else if (auto normal_map_node = std::dynamic_pointer_cast<material::NNormalMap>(expr_node))
+    {
+
+    }
+    else if (auto disperse_node = std::dynamic_pointer_cast<material::NDisperse>(expr_node))
+    {
+
+    }
+
+    g_scene->material_nodes.push_back(node);
+
+    return int32_t(g_scene->material_nodes.size() - 1);
+}
+
+int32_t bake_texture(raw::MaterialPtr material, const std::string& texture)
+{
+    return -1;
 }
 
 } // anonymous namespace

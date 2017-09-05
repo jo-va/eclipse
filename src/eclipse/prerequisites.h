@@ -24,6 +24,10 @@ namespace eclipse {
 #   define __aligned(...) __attribute__((aligned(__VA_ARGS__)))
 #endif
 
+#if !defined(__packed)
+#   define __packed __attribute__((__packed__))
+#endif
+
 #if defined(__clang__) || defined(__GNUC__)
 #   define MAYBE_UNUSED __attribute__((unused))
 #else

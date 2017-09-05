@@ -5,7 +5,7 @@
 
 namespace eclipse {
 
-class Vec2
+class __packed Vec2
 {
 public:
     inline Vec2(float x = 0.0f, float y = 0.0f)

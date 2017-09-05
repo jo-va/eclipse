@@ -1,6 +1,7 @@
 #pragma once
 
 #include "eclipse/scene/bvh_node.h"
+#include "eclipse/scene/material_node.h"
 #include "eclipse/math/vec2.h"
 #include "eclipse/math/vec4.h"
 #include "eclipse/math/mat4.h"
@@ -22,6 +23,7 @@ struct Scene
 {
     std::vector<bvh::Node> bvh_nodes;
     std::vector<MeshInstance> mesh_instances;
+    std::vector<MaterialNode> material_nodes;
 
     // Primitives are stored as an array of structs
     std::vector<Vec4> vertices;
