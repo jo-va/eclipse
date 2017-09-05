@@ -23,7 +23,7 @@ struct Scene
 {
     std::vector<bvh::Node> bvh_nodes;
     std::vector<MeshInstance> mesh_instances;
-    std::vector<MaterialNode> material_nodes;
+    std::vector<material::Node> material_nodes;
 
     // Primitives are stored as an array of structs
     std::vector<Vec4> vertices;

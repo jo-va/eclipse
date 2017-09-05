@@ -48,7 +48,7 @@
 }
 
 %token                      END 0 "end of file"
-%token <BxdfType>           BXDF_TYPE
+%token <NodeType>           BXDF_TYPE
 %token <std::string>        TEX MAT
 %token <float>              NUM
 %token                      MIX MMAP BMAP NMAP DISP

@@ -257,14 +257,14 @@ int32_t generate_material(raw::MaterialPtr material)
 // Return the index of the tree root in the scene's material node list.
 int32_t generate_material_tree(raw::MaterialPtr material, material::ExprNodePtr expr_node)
 {
-    MaterialNode node;
+    material::Node node;
 
     std::string error;
-    float int_ior = material::get_known_ior(std::string(defaults::IntIOR), error);
-    float ext_ior = material::get_known_ior(std::string(defaults::ExtIOR), error);
+    float int_ior = material::get_known_ior(std::string(material::defaults::IntIOR), error);
+    float ext_ior = material::get_known_ior(std::string(material::defaults::ExtIOR), error);
 
-    node.set_float(MaterialNode::INT_IOR, int_ior);
-    node.set_float(MaterialNode::EXT_IOR, ext_ior);
+    node.set_float(material::INT_IOR, int_ior);
+    node.set_float(material::EXT_IOR, ext_ior);
 
     if (auto mat_ref_node = std::dynamic_pointer_cast<material::NMatRef>(expr_node))
     {
@@ -293,41 +293,51 @@ int32_t generate_material_tree(raw::MaterialPtr material, material::ExprNodePtr 
     }
     else if (auto bxdf_node = std::dynamic_pointer_cast<material::NBxdf>(expr_node))
     {
+        node.set_type(bxdf_node->type);
 
         if (bxdf_node->type == material::DIFFUSE)
         {
-            node.set_type(MaterialNode::DIFFUSE);
-            node.set_vec3(MaterialNode::REFLECTANCE, Vec3(defaults::Reflectance));
+            node.set_vec3(material::REFLECTANCE, Vec3(material::defaults::Reflectance));
         }
         else if (bxdf_node->type == material::CONDUCTOR)
         {
-            node.set_type(MaterialNode::CONDUCTOR);
-            node.set_vec3(MaterialNode::SPECULARITY, Vec3(defaults::Specularity));
+            node.set_vec3(material::SPECULARITY, Vec3(material::defaults::Specularity));
         }
         else if (bxdf_node->type == material::ROUGH_CONDUCTOR)
         {
-            node.set_type(MaterialNode::ROUGH_CONDUCTOR);
-            node.set_vec3(MaterialNode::SPECULARITY, Vec3(defaults::Specularity));
-            node.set_float(MaterialNode::ROUGHNESS, defaults::Roughness);
+            node.set_vec3(material::SPECULARITY, Vec3(material::defaults::Specularity));
+            node.set_float(material::ROUGHNESS, material::defaults::Roughness);
         }
         else if (bxdf_node->type == material::DIELECTRIC)
         {
-            node.set_type(MaterialNode::DIELECTRIC);
-            node.set_vec3(MaterialNode::SPECULARITY, Vec3(defaults::Specularity));
-            node.set_vec3(MaterialNode::TRANSMITTANCE, Vec3(defaults::Transmittance));
+            node.set_vec3(material::SPECULARITY, Vec3(material::defaults::Specularity));
+            node.set_vec3(material::TRANSMITTANCE, Vec3(material::defaults::Transmittance));
         }
         else if (bxdf_node->type == material::ROUGH_DIELECTRIC)
         {
-            node.set_type(MaterialNode::ROUGH_DIELECTRIC);
-            node.set_vec3(MaterialNode::SPECULARITY, Vec3(defaults::Specularity));
-            node.set_vec3(MaterialNode::TRANSMITTANCE, Vec3(defaults::Transmittance));
-            node.set_float(MaterialNode::ROUGHNESS, defaults::Roughness);
+            node.set_vec3(material::SPECULARITY, Vec3(material::defaults::Specularity));
+            node.set_vec3(material::TRANSMITTANCE, Vec3(material::defaults::Transmittance));
+            node.set_float(material::ROUGHNESS, material::defaults::Roughness);
         }
         else if (bxdf_node->type == material::EMISSIVE)
         {
-            node.set_type(MaterialNode::EMISSIVE);
-            node.set_vec3(MaterialNode::RADIANCE, Vec3(defaults::Radiance));
-            node.set_float(MaterialNode::SCALER, defaults::RadianceScaler);
+            node.set_vec3(material::RADIANCE, Vec3(material::defaults::Radiance));
+            node.set_float(material::SCALER, material::defaults::RadianceScaler);
+        }
+
+        for (auto& param : bxdf_node->parameters)
+        {
+            LOG_INFO("bxdf param: ", material::param_to_string(param.type), " - ",
+                     param.value.vec[0], " ", param.value.vec[1], " ", param.value.vec[2], " ", param.value.name);
+            switch (param.type)
+            {
+                case material::REFLECTANCE:
+                case material::SPECULARITY:
+                case material::RADIANCE:
+                    ;
+                    //if (param.value.type == material::VECTOR)
+                    //    node.set_vec3()
+            }
         }
     }
     else if (auto mix_node = std::dynamic_pointer_cast<material::NMix>(expr_node))

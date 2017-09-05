@@ -72,33 +72,39 @@ std::string validate_known_ior_name(const std::string& name)
     return "";
 }
 
-std::string bxdf_to_string(BxdfType bxdf)
+std::string node_to_string(NodeType node)
 {
-    switch (bxdf)
+    switch (node)
     {
-    case EMISSIVE:         return "emissive";
-    case DIFFUSE:          return "diffuse";
-    case CONDUCTOR:        return "conductor";
-    case ROUGH_CONDUCTOR:  return "roughConductor";
-    case DIELECTRIC:       return "dielectric";
-    case ROUGH_DIELECTRIC: return "roughDielectric";
-    default:               return "invalid";
+        case DIFFUSE:          return "diffuse";
+        case CONDUCTOR:        return "conductor";
+        case ROUGH_CONDUCTOR:  return "roughConductor";
+        case DIELECTRIC:       return "dielectric";
+        case ROUGH_DIELECTRIC: return "roughDielectric";
+        case EMISSIVE:         return "emissive";
+        case MIX:              return "mix";
+        case MIXMAP:           return "mixMap";
+        case BUMPMAP:          return "bumpMap";
+        case NORMALMAP:        return "normalMap";
+        case DISPERSE:         return "disperse";
+        default:               return "invalid";
     }
 }
 
-std::string bxdf_param_to_string(ParamType param)
+std::string param_to_string(ParamType param)
 {
     switch (param)
     {
-    case REFLECTANCE:   return "reflectance";
-    case SPECULARITY:   return "specularity";
-    case TRANSMITTANCE: return "transmittance";
-    case RADIANCE:      return "radiance";
-    case INT_IOR:       return "intIOR";
-    case EXT_IOR:       return "extIOR";
-    case SCALER:        return "scaler";
-    case ROUGHNESS:     return "roughness";
-    default:            return "invalid";
+        case REFLECTANCE:   return "reflectance";
+        case SPECULARITY:   return "specularity";
+        case TRANSMITTANCE: return "transmittance";
+        case RADIANCE:      return "radiance";
+        case INT_IOR:       return "intIOR";
+        case EXT_IOR:       return "extIOR";
+        case SCALER:        return "scaler";
+        case ROUGHNESS:     return "roughness";
+        case WEIGHT:        return "weight";
+        default:            return "invalid";
     }
 }
 
@@ -139,18 +145,18 @@ std::string NBxdfParam::validate() const
         return "Invalid BXDF type";
     case REFLECTANCE:
         if (value.type == VECTOR && (value.vec[0] >= 1.0f || value.vec[1] >= 1.0f || value.vec[2] >= 1.0f))
-            return "Energy conservation violation for parameter " + bxdf_param_to_string(type) +
+            return "Energy conservation violation for parameter " + param_to_string(type) +
                    "; ensure that all vector components are < 1.0";
         break;
     case SPECULARITY:
     case TRANSMITTANCE:
         if (value.type == VECTOR && (value.vec[0] >= 1.0f || value.vec[1] >= 1.0f || value.vec[2] >= 1.0f))
-            return "Energy conservation violation for parameter " + bxdf_param_to_string(type) +
+            return "Energy conservation violation for parameter " + param_to_string(type) +
                    "; ensure that all vector components are < 1.0";
         break;
     case ROUGHNESS:
         if (value.type == NUM && (value.vec[0] < 0.0f || value.vec[0] > 1.0f))
-            return "Values for parameter " + bxdf_param_to_string(type) + " must be in the [0, 1] range";
+            return "Values for parameter " + param_to_string(type) + " must be in the [0, 1] range";
         break;
     case INT_IOR:
     case EXT_IOR:
@@ -168,14 +174,14 @@ std::string NBxdfParam::validate() const
     return value.validate();
 }
 
-NBxdf::NBxdf(BxdfType type, NBxdfParamList params)
+NBxdf::NBxdf(NodeType type, NBxdfParamList params)
         : type(type), parameters(std::move(params))
 {
 }
 
-std::map<BxdfType, std::vector<ParamType>> allowed_bxdf_params =
+std::map<NodeType, std::vector<ParamType>> allowed_bxdf_params =
 {
-    { INVALID_BXDF,     {                } },
+    { INVALID_NODE,     {                } },
     { DIFFUSE,          { REFLECTANCE    } },
     { EMISSIVE,         { RADIANCE,
                           SCALER         } },
@@ -199,7 +205,7 @@ std::map<BxdfType, std::vector<ParamType>> allowed_bxdf_params =
 
 std::string NBxdf::validate() const
 {
-    if (type == INVALID_BXDF)
+    if (type == INVALID_NODE)
         return "Invalid BXDF type";
 
     for (auto& param : parameters)
@@ -207,7 +213,7 @@ std::string NBxdf::validate() const
         auto map_it = allowed_bxdf_params.find(type);
         std::vector<ParamType>& allowed_params = map_it->second;
         if (std::find(allowed_params.begin(), allowed_params.end(), param.type) == allowed_params.end())
-            return "Bxdf type " + bxdf_to_string(type) + " does not support parameter " + bxdf_param_to_string(param.type);
+            return "Bxdf type " + node_to_string(type) + " does not support parameter " + param_to_string(param.type);
 
         std::string error = param.validate();
         if (!error.empty())

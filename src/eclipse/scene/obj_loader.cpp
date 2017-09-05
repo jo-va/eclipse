@@ -136,7 +136,7 @@ std::string Material::get_expression()
     bool is_specular_reflection = max_component(Ks) > 0.0f || !Ks_tex.empty();
     bool is_emissive = max_component(Ke) > 0.0f || !Ke_tex.empty();
 
-    material::BxdfType bxdf;
+    material::NodeType bxdf;
     std::vector<std::string> expr_args;
 
     if (is_specular_reflection && Ni == 0.0f)
@@ -186,7 +186,7 @@ std::string Material::get_expression()
     for (auto const& s : expr_args)
         joined_expr_args += ", " + s;
 
-    std::string expr = material::bxdf_to_string(bxdf) + "(" + joined_expr_args + ")";
+    std::string expr = material::node_to_string(bxdf) + "(" + joined_expr_args + ")";
 
     if (!normal_tex.empty())
         expr = "normalMap(" + expr + ", " + normal_tex + ")";

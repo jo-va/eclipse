@@ -6,12 +6,31 @@
 #include <cstring>
 #include <cstdint>
 
-namespace eclipse {
+namespace eclipse { namespace material {
 
-MaterialNode::MaterialNode()
+template <typename T, typename F>
+struct alias_cast_t
+{
+    union
+    {
+        F raw;
+        T data;
+    };
+};
+
+template <typename T, typename F>
+T alias_cast(F raw_data)
+{
+    static_assert(sizeof(T) == sizeof(F), "Cannot cast types of different sizes");
+    alias_cast_t<T, F> ac;
+    ac.raw = raw_data;
+    return ac.data;
+}
+
+Node::Node()
 {
     memset(this, 0, sizeof(*this));
-    int32_t* iptr = (int32_t*)data;
+    int32_t* iptr = alias_cast<int32_t*>(data);
 
     // Set textures to -1
     iptr[1] = -1;
@@ -20,30 +39,30 @@ MaterialNode::MaterialNode()
     iptr[15] = -1;
 }
 
-void MaterialNode::set_type(uint32_t type)
+void Node::set_type(uint32_t type)
 {
-    *reinterpret_cast<uint32_t*>(data) = type;
+    *alias_cast<uint32_t*>(data) = type;
 }
 
-void MaterialNode::set_vec3(ParamType param_type, const Vec3& v)
+void Node::set_vec3(ParamType param_type, const Vec3& v)
 {
     if (param_type == REFLECTANCE ||
         param_type == SPECULARITY ||
         param_type == RADIANCE    ||
         param_type == INT_IOR)
     {
-        *((Vec3*)((uintptr_t)data + 4)) = v;
+        *alias_cast<Vec3*>(data + 4) = v;
     }
     else if (param_type == TRANSMITTANCE ||
              param_type == EXT_IOR)
     {
-        *((Vec3*)((uintptr_t)data + 8)) = v;
+        *alias_cast<Vec3*>(data + 8) = v;
     }
 }
 
-void MaterialNode::set_float(ParamType param_type, float v)
+void Node::set_float(ParamType param_type, float v)
 {
-    float* ptr = (float*)data;
+    float* ptr = alias_cast<float*>(data);
     if (param_type == WEIGHT)
     {
         ptr[4] = v;
@@ -62,9 +81,9 @@ void MaterialNode::set_float(ParamType param_type, float v)
     }
 }
 
-void MaterialNode::set_texture(ParamType param_type, int32_t texture)
+void Node::set_texture(ParamType param_type, int32_t texture)
 {
-    int32_t* ptr = (int32_t*)data;
+    int32_t* ptr = alias_cast<int32_t*>(data);
     int32_t type = ptr[0];
 
     if (param_type == TRANSMITTANCE)
@@ -86,14 +105,14 @@ void MaterialNode::set_texture(ParamType param_type, int32_t texture)
     }
 }
 
-void MaterialNode::set_left_child(int32_t left)
+void Node::set_left_child(int32_t left)
 {
-    *((int32_t*)(data + 1)) = left;
+    *alias_cast<int32_t*>(data + 1) = left;
 }
 
-void MaterialNode::set_right_child(int32_t right)
+void Node::set_right_child(int32_t right)
 {
-    *((int32_t*)(data + 2)) = right;
+    *alias_cast<int32_t*>(data + 2) = right;
 }
 
-} // namespace eclipse
+} } // namespace eclipse::material

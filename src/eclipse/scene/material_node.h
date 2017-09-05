@@ -5,7 +5,7 @@
 
 #include <cstdint>
 
-namespace eclipse {
+namespace eclipse { namespace material {
 
 namespace defaults {
 
@@ -20,39 +20,11 @@ constexpr char  ExtIOR[]         = "Air";
 
 } // namespace defaults
 
-struct MaterialNode
+struct Node
 {
-    enum NodeType
-    {
-        DIFFUSE = 0,
-        CONDUCTOR,
-        ROUGH_CONDUCTOR,
-        DIELECTRIC,
-        ROUGH_DIELECTRIC,
-        EMISSIVE,
-        MIX,
-        MIXMAP,
-        BUMPMAP,
-        NORMALMAP,
-        DISPERSE
-    };
-
-    enum ParamType
-    {
-        REFLECTANCE,
-        SPECULARITY,
-        TRANSMITTANCE,
-        RADIANCE,
-        INT_IOR,
-        EXT_IOR,
-        SCALER,
-        ROUGHNESS,
-        WEIGHT
-    };
-
     uint8_t data[64];
 
-    MaterialNode();
+    Node();
 
     void set_type(uint32_t type);
 
@@ -64,5 +36,4 @@ struct MaterialNode
     void set_right_child(int32_t right);
 } __packed;
 
-
-} // namespace eclipse
+} } // namespace eclipse::material

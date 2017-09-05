@@ -8,33 +8,25 @@
 
 namespace eclipse { namespace material {
 
-class ExprNode
+enum NodeType
 {
-public:
-    virtual ~ExprNode() { }
-    virtual std::string validate() const { return ""; }
-};
-
-std::unique_ptr<ExprNode> parse_expr(const std::string& expr, std::string& error);
-
-typedef std::shared_ptr<ExprNode> ExprNodePtr;
-
-enum BxdfType
-{
-    INVALID_BXDF = 0,
+    INVALID_NODE,
     DIFFUSE,
     CONDUCTOR,
     ROUGH_CONDUCTOR,
     DIELECTRIC,
     ROUGH_DIELECTRIC,
-    EMISSIVE
+    EMISSIVE,
+    MIX,
+    MIXMAP,
+    BUMPMAP,
+    NORMALMAP,
+    DISPERSE
 };
-
-std::string bxdf_to_string(BxdfType bxdf);
 
 enum ParamType
 {
-    INVALID_PARAM = 0,
+    INVALID_PARAM,
     REFLECTANCE,
     SPECULARITY,
     TRANSMITTANCE,
@@ -42,9 +34,22 @@ enum ParamType
     INT_IOR,
     EXT_IOR,
     SCALER,
-    ROUGHNESS
+    ROUGHNESS,
+    WEIGHT
 };
 
+class ExprNode
+{
+public:
+    virtual ~ExprNode() { }
+    virtual std::string validate() const { return ""; }
+};
+
+typedef std::shared_ptr<ExprNode> ExprNodePtr;
+
+std::unique_ptr<ExprNode> parse_expr(const std::string& expr, std::string& error);
+
+std::string node_to_string(NodeType bxdf);
 std::string param_to_string(ParamType param);
 
 enum ParamValueType
@@ -95,10 +100,10 @@ class OpNode : public ExprNode
 class NBxdf : public ExprNode
 {
 public:
-    BxdfType type;
+    NodeType type;
     NBxdfParamList parameters;
 
-    explicit NBxdf(BxdfType type, NBxdfParamList params = { });
+    explicit NBxdf(NodeType type, NBxdfParamList params = { });
     std::string validate() const override;
 };
 
