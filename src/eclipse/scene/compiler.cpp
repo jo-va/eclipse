@@ -436,30 +436,38 @@ int32_t generate_material_tree(raw::MaterialPtr material, material::ExprNodePtr 
 
 // Load a texture resource and store its data into the scene.
 // Texture data is always aligned on a dword boundary.
-int32_t bake_texture(raw::MaterialPtr material, const std::string& texture)
+int32_t bake_texture(raw::MaterialPtr material, const std::string& tex_name)
 {
     std::shared_ptr<Resource> res;
     try
     {
-        res = std::make_shared<Resource>(texture, material->resource);
+        res = std::make_shared<Resource>(tex_name, material->resource);
     }
     catch (ResourceError& e)
     {
-        LOG_WARNING(material->name, ": skipping missing texture ", texture);
+        LOG_WARNING(material->name, ": skipping missing texture ", tex_name);
         return -1;
     }
 
     // Check if the texture is already loaded
-    auto cache_iter = g_texture_index_cache.find(texture);
+    auto cache_iter = g_texture_index_cache.find(tex_name);
     if (cache_iter != g_texture_index_cache.end())
     {
-        LOG_INFO(material->name, ": reusing already loaded texture ", texture);
+        LOG_INFO(material->name, ": reusing already loaded texture ", tex_name);
         return cache_iter->second;
     }
 
-    LOG_INFO(material->name, ": processing texture ", texture);
+    LOG_INFO(material->name, ": processing texture ", tex_name);
 
-    auto tex = std::make_shared<Texture>(res);
+    std::shared_ptr<Texture> texture;
+    try
+    {
+        texture = std::make_shared<Texture>(res);
+    }
+    catch (TextureError& e)
+    {
+        throw TextureError(material->name + e.what());
+    }
 
     return -1;
 }
