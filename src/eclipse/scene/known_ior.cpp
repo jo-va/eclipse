@@ -1,4 +1,5 @@
 #include "eclipse/scene/known_ior.h"
+#include "eclipse/scene/material_except.h"
 
 #include <map>
 #include <string>
@@ -280,20 +281,16 @@ void init_ior_cache()
 
 } // anonymous namespace
 
-float get_known_ior(const std::string& material, std::string& msg)
+float get_known_ior(const std::string& material)
 {
     if (!g_ior_initialized)
         init_ior_cache();
 
     auto iter = known_iors_cache.find(to_upper(material));
     if (iter != known_iors_cache.end())
-    {
-        msg = "";
         return iter->second;
-    }
 
-    msg = "Unknown material name " + material + "; try specifying the IOR manually";
-    return -1.0f;
+    throw Error("Unknown material name " + material + "; try specifying the IOR manually");
 }
 
 } } // namespace eclipse::material

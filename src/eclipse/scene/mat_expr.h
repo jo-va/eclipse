@@ -3,8 +3,10 @@
 #include <string>
 #include <vector>
 #include <memory>
+#include <stdexcept>
 
 #include "eclipse/math/vec3.h"
+#include "eclipse/scene/material_except.h"
 
 namespace eclipse { namespace material {
 
@@ -42,12 +44,12 @@ class ExprNode
 {
 public:
     virtual ~ExprNode() { }
-    virtual std::string validate() const { return ""; }
+    virtual void validate() const { }
 };
 
 typedef std::shared_ptr<ExprNode> ExprNodePtr;
 
-std::unique_ptr<ExprNode> parse_expr(const std::string& expr, std::string& error);
+std::unique_ptr<ExprNode> parse_expr(const std::string& expr);
 
 std::string node_to_string(NodeType bxdf);
 std::string param_to_string(ParamType param);
@@ -75,7 +77,7 @@ struct ParamValue
     Vec3 vec;
     std::string name;
 
-    std::string validate() const;
+    void validate() const;
 
     static ParamValue num(float v);
     static ParamValue vec3(float x, float y, float z);
@@ -88,7 +90,7 @@ struct NBxdfParam
     ParamType type;
     ParamValue value;
 
-    std::string validate() const;
+    void validate() const;
 };
 
 typedef std::vector<NBxdfParam> NBxdfParamList;
@@ -104,7 +106,7 @@ public:
     NBxdfParamList parameters;
 
     explicit NBxdf(NodeType type, NBxdfParamList params = { });
-    std::string validate() const override;
+    void validate() const override;
 };
 
 class NMatRef : public ExprNode
@@ -113,7 +115,7 @@ public:
     std::string name;
 
     explicit NMatRef(const std::string& mat);
-    std::string validate() const override;
+    void validate() const override;
 };
 
 class NMix : public OpNode
@@ -123,7 +125,7 @@ public:
     float weight;
 
     explicit NMix(ExprNode* left, ExprNode* right, float w);
-    std::string validate() const override;
+    void validate() const override;
 };
 
 class NMixMap : public OpNode
@@ -133,7 +135,7 @@ public:
     std::string texture;
 
     explicit NMixMap(ExprNode* left, ExprNode* right, ParamValue tex);
-    std::string validate() const override;
+    void validate() const override;
 };
 
 class NBumpMap : public OpNode
@@ -143,7 +145,7 @@ public:
     std::string texture;
 
     explicit NBumpMap(ExprNode* expr, ParamValue tex);
-    std::string validate() const override;
+    void validate() const override;
 };
 
 class NNormalMap : public OpNode
@@ -153,7 +155,7 @@ public:
     std::string texture;
 
     explicit NNormalMap(ExprNode* expr, ParamValue tex);
-    std::string validate() const override;
+    void validate() const override;
 };
 
 class NDisperse : public OpNode
@@ -164,7 +166,7 @@ public:
     Vec3 ext_ior;
 
     explicit NDisperse(ExprNode* expr, ParamValue iior, ParamValue eior);
-    std::string validate() const override;
+    void validate() const override;
 };
 
 } } // namespace eclipse::material

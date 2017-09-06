@@ -8,13 +8,14 @@
 #include "eclipse/scene/mat_expr.h"
 #include "eclipse/scene/mat_expr_scanner.h"
 #include "eclipse/scene/mat_expr_parser.hxx"
+#include "eclipse/scene/material_except.h"
 #include "eclipse/scene/known_ior.h"
 #include "eclipse/util/logger.h"
 #include "eclipse/math/vec3.h"
 
 namespace eclipse { namespace material {
 
-std::unique_ptr<ExprNode> parse_expr(const std::string& expr, std::string& error)
+std::unique_ptr<ExprNode> parse_expr(const std::string& expr)
 {
     class ParsedExpression : public ParserCallback
     {
@@ -39,37 +40,33 @@ std::unique_ptr<ExprNode> parse_expr(const std::string& expr, std::string& error
     {
         if (parser.parse() != 0)
         {
-            error = "Unknown material expression parsing error";
-            return nullptr;
+            throw ParseError("Unknown material expression parsing error");
         }
     }
     catch (MatExprSyntaxError& e)
     {
         int col = e.location.begin.column;
         int len = 1 + e.location.end.column - col;
-        error = std::string(e.what()) + "\n" +
-                "in col " + std::to_string(col) + ":\n\n" +
-                "    " + expr + "\n" +
-                "    " + std::string(col-1, ' ') + std::string(len, '^');
-        return nullptr;
+        std::string error = std::string(e.what()) + "\n" +
+                            "in col " + std::to_string(col) + ":\n\n" +
+                            "    " + expr + "\n" +
+                            "    " + std::string(col-1, ' ') + std::string(len, '^');
+        throw ParseError(error);
     }
 
-    error = "";
     return std::move(out.get());
 }
 
-std::string validate_texture_name(const std::string& name)
+void validate_texture_name(const std::string& name)
 {
     if (name.empty())
-        return "Texure name cannot be empty";
-    return "";
+        throw ValidationError("Texture name cannot be empty");
 }
 
-std::string validate_known_ior_name(const std::string& name)
+void validate_known_ior_name(const std::string& name)
 {
     if (name.empty())
-        return "Material name cannot be empty";
-    return "";
+        throw ValidationError("Material name cannot be empty");
 }
 
 std::string node_to_string(NodeType node)
@@ -128,50 +125,44 @@ ParamValue ParamValue::known_ior(std::string name)
     return { KNOWN_IOR, Vec3(0, 0, 0), std::move(name) };
 }
 
-std::string ParamValue::validate() const
+void ParamValue::validate() const
 {
     if (type == TEXTURE)
-        return validate_texture_name(name);
+        validate_texture_name(name);
     else if (type == KNOWN_IOR)
-        return validate_known_ior_name(name);
-    return "";
+        validate_known_ior_name(name);
 }
 
-std::string NBxdfParam::validate() const
+void NBxdfParam::validate() const
 {
     switch (type)
     {
     case INVALID_PARAM:
-        return "Invalid BXDF type";
+        throw ValidationError("Invalid BXDF param type");
     case REFLECTANCE:
         if (value.type == VECTOR && (value.vec[0] >= 1.0f || value.vec[1] >= 1.0f || value.vec[2] >= 1.0f))
-            return "Energy conservation violation for parameter " + param_to_string(type) +
-                   "; ensure that all vector components are < 1.0";
+            throw ValidationError("Energy conservation violation for parameter " + param_to_string(type) +
+                                  "; ensure that all vector components are < 1.0");
         break;
     case SPECULARITY:
     case TRANSMITTANCE:
         if (value.type == VECTOR && (value.vec[0] >= 1.0f || value.vec[1] >= 1.0f || value.vec[2] >= 1.0f))
-            return "Energy conservation violation for parameter " + param_to_string(type) +
-                   "; ensure that all vector components are < 1.0";
+            throw ValidationError("Energy conservation violation for parameter " + param_to_string(type) +
+                                  "; ensure that all vector components are < 1.0");
         break;
     case ROUGHNESS:
         if (value.type == NUM && (value.vec[0] < 0.0f || value.vec[0] > 1.0f))
-            return "Values for parameter " + param_to_string(type) + " must be in the [0, 1] range";
+            throw ValidationError("Values for parameter " + param_to_string(type) + " must be in the [0, 1] range");
         break;
     case INT_IOR:
     case EXT_IOR:
         if (value.type == KNOWN_IOR)
-        {
-            std::string error;
-            get_known_ior(value.name, error);
-            if (!error.empty())
-                return error;
-        }
+            get_known_ior(value.name);
         break;
     default:
         break;
     }
-    return value.validate();
+    value.validate();
 }
 
 NBxdf::NBxdf(NodeType type, NBxdfParamList params)
@@ -203,23 +194,21 @@ std::map<NodeType, std::vector<ParamType>> allowed_bxdf_params =
                           ROUGHNESS      } }
 };
 
-std::string NBxdf::validate() const
+void NBxdf::validate() const
 {
     if (type == INVALID_NODE)
-        return "Invalid BXDF type";
+        throw ValidationError("Invalid BXDF type");
 
     for (auto& param : parameters)
     {
         auto map_it = allowed_bxdf_params.find(type);
         std::vector<ParamType>& allowed_params = map_it->second;
         if (std::find(allowed_params.begin(), allowed_params.end(), param.type) == allowed_params.end())
-            return "Bxdf type " + node_to_string(type) + " does not support parameter " + param_to_string(param.type);
+            throw ValidationError("Bxdf type " + node_to_string(type) +
+                    " does not support parameter " + param_to_string(param.type));
 
-        std::string error = param.validate();
-        if (!error.empty())
-            return error;
+        param.validate();
     }
-    return "";
 }
 
 NMatRef::NMatRef(const std::string& mat)
@@ -227,11 +216,10 @@ NMatRef::NMatRef(const std::string& mat)
 {
 }
 
-std::string NMatRef::validate() const
+void NMatRef::validate() const
 {
     if (name.empty())
-        return "MatRef: material name cannot be empty";
-    return "";
+        throw ValidationError("MatRef: material name cannot be empty");
 }
 
 NMix::NMix(ExprNode* left, ExprNode* right, float w)
@@ -240,24 +228,25 @@ NMix::NMix(ExprNode* left, ExprNode* right, float w)
 {
 }
 
-std::string NMix::validate() const
+void NMix::validate() const
 {
     if (!expressions[0])
-        return "NormalMap: missing left expression argument";
+        throw ValidationError("Mix: missing left expression argument");
     else if (!expressions[1])
-        return "NormalMap: missing right expression argument";
+        throw ValidationError("Mix: missing right expression argument");
 
-    std::string error;
-    error = expressions[0]->validate();
-    if (!error.empty())
-        return "NormalMap: " + error;
-    error = expressions[1]->validate();
-    if (!error.empty())
-        return "NormalMap: " + error;
+    try
+    {
+        expressions[0]->validate();
+        expressions[1]->validate();
+    }
+    catch (ValidationError& e)
+    {
+        throw ValidationError("Mix: " + std::string(e.what()));
+    }
 
     if (weight < 0.0f || weight > 1.0f)
-        return "NormalMap: mix weight must be in the [0, 1] range";
-    return "";
+        throw ValidationError("Mix: mix weight must be in the [0, 1] range");
 }
 
 NMixMap::NMixMap(ExprNode* left, ExprNode* right, ParamValue tex)
@@ -266,25 +255,23 @@ NMixMap::NMixMap(ExprNode* left, ExprNode* right, ParamValue tex)
 {
 }
 
-std::string NMixMap::validate() const
+void NMixMap::validate() const
 {
     if (!expressions[0])
-        return "MixMap: missing left expression argument";
+        throw ValidationError("MixMap: missing left expression argument");
     else if (!expressions[1])
-        return "MixMap: missing right expression argument";
+        throw ValidationError("MixMap: missing right expression argument");
 
-    std::string error;
-    error = expressions[0]->validate();
-    if (!error.empty())
-        return "MixMap: " + error;
-    error = expressions[1]->validate();
-    if (!error.empty())
-        return "MixMap: " + error;
-
-    error = validate_texture_name(texture);
-    if (!error.empty())
-        return "MixMap: " + error;
-    return error;
+    try
+    {
+        expressions[0]->validate();
+        expressions[1]->validate();
+        validate_texture_name(texture);
+    }
+    catch (ValidationError& e)
+    {
+        throw ValidationError("MixMap: " + std::string(e.what()));
+    }
 }
 
 NBumpMap::NBumpMap(ExprNode* expr, ParamValue tex)
@@ -292,19 +279,20 @@ NBumpMap::NBumpMap(ExprNode* expr, ParamValue tex)
 {
 }
 
-std::string NBumpMap::validate() const
+void NBumpMap::validate() const
 {
     if (!expression)
-        return "BumpMap: missing expression argument";
+        throw ValidationError("BumpMap: missing expression argument");
 
-    std::string error = expression->validate();
-    if (!error.empty())
-        return "BumpMap: " + error;
-
-    error = validate_texture_name(texture);
-    if (!error.empty())
-        return "BumpMap: " + error;
-    return error;
+    try
+    {
+        expression->validate();
+        validate_texture_name(texture);
+    }
+    catch (ValidationError& e)
+    {
+        throw ValidationError("BumpMap: " + std::string(e.what()));
+    }
 }
 
 NNormalMap::NNormalMap(ExprNode* expr, ParamValue tex)
@@ -312,19 +300,20 @@ NNormalMap::NNormalMap(ExprNode* expr, ParamValue tex)
 {
 }
 
-std::string NNormalMap::validate() const
+void NNormalMap::validate() const
 {
     if (!expression)
-        return "NormalMap: missing expression argument";
+        throw ValidationError("NormalMap: missing expression argument");
 
-    std::string error = expression->validate();
-    if (!error.empty())
-        return "NormalMap: " + error;
-
-    error = validate_texture_name(texture);
-    if (!error.empty())
-        return "NormalMap: " + error;
-    return error;
+    try
+    {
+        expression->validate();
+        validate_texture_name(texture);
+    }
+    catch (ValidationError& e)
+    {
+        throw ValidationError("NormalMap: " + std::string(e.what()));
+    }
 }
 
 NDisperse::NDisperse(ExprNode* expr, ParamValue iior, ParamValue eior)
@@ -332,20 +321,24 @@ NDisperse::NDisperse(ExprNode* expr, ParamValue iior, ParamValue eior)
 {
 }
 
-std::string NDisperse::validate() const
+void NDisperse::validate() const
 {
     if (!expression)
-        return "Disperse: missing expression argument";
+        throw ValidationError("Disperse: missing expression argument");
 
-    std::string error = expression->validate();
-    if (!error.empty())
-        return "Dispers: " + error;
+    try
+    {
+        expression->validate();
+    }
+    catch (ValidationError& e)
+    {
+        throw ValidationError("Disperse: " + std::string(e.what()));
+    }
 
     if (max_component(int_ior) == 0.0f && max_component(ext_ior) == 0.0f)
     {
-        return "Disperse: at least one of the intIOR and extIOR parameters must contain a non-zero value";
+        throw ValidationError("Disperse: at least one of the intIOR and extIOR parameters must contain a non-zero value");
     }
-    return error;
 }
 
 } } // namespace eclipse::material

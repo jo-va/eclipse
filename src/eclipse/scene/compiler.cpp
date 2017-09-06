@@ -4,6 +4,7 @@
 #include "eclipse/scene/bvh_builder.h"
 #include "eclipse/scene/mat_expr.h"
 #include "eclipse/scene/known_ior.h"
+#include "eclipse/scene/material_except.h"
 #include "eclipse/util/logger.h"
 #include "eclipse/util/stop_watch.h"
 #include "eclipse/math/vec3.h"
@@ -207,14 +208,29 @@ void create_layered_material_tree()
         raw::MaterialPtr mat = g_raw_scene->materials[mat_index];
 
         // Skip unused materials; those materials may be indirectly
-        // reference from other used materials and will be lazilly
+        // referenced from other used materials and will be lazilly
         // processed while compiling material expressions
         if (!mat->used)
             continue;
 
         LOG_INFO("Processing material ", mat->name);
 
-        g_mat_index_to_mat_root[mat_index] = generate_material(mat);
+        try
+        {
+            g_mat_index_to_mat_root[mat_index] = generate_material(mat);
+        }
+        catch (material::ParseError& e)
+        {
+            LOG_ERROR("Expression parsing error for material `", mat->name, "`: ", e.what());
+        }
+        catch (material::ValidationError& e)
+        {
+            LOG_ERROR("Expression validation error for material `", mat->name, "`: ", e.what());
+        }
+        catch (material::Error& e)
+        {
+            LOG_ERROR("Error when processing material `", mat->name, "`: ", e.what());
+        }
 
         // TODO: fill emssive_index_cache
 
@@ -232,20 +248,11 @@ void create_layered_material_tree()
 // This method returns back the root material tree node index.
 int32_t generate_material(raw::MaterialPtr material)
 {
-    std::string error;
-    material::ExprNodePtr expr_node = material::parse_expr(material->expression, error);
+    material::ExprNodePtr expr_node = material::parse_expr(material->expression);
     if (!expr_node)
-    {
-        LOG_ERROR("Expression error for material '", material->name, "': ", error);
-        return -1;
-    }
+        throw material::ParseError("unknown error");
 
-    error = expr_node->validate();
-    if (!error.empty())
-    {
-        LOG_ERROR("Expression error for material '", material->name, "': ", error);
-        return -1;
-    }
+    expr_node->validate();
 
     g_mat_ref_list.push_back(material->name);
 
@@ -259,9 +266,8 @@ int32_t generate_material_tree(raw::MaterialPtr material, material::ExprNodePtr 
 {
     material::Node node;
 
-    std::string error;
-    float int_ior = material::get_known_ior(std::string(material::defaults::IntIOR), error);
-    float ext_ior = material::get_known_ior(std::string(material::defaults::ExtIOR), error);
+    float int_ior = material::get_known_ior(std::string(material::defaults::IntIOR));
+    float ext_ior = material::get_known_ior(std::string(material::defaults::ExtIOR));
 
     node.set_float(material::INT_IOR, int_ior);
     node.set_float(material::EXT_IOR, ext_ior);
@@ -276,9 +282,9 @@ int32_t generate_material_tree(raw::MaterialPtr material, material::ExprNodePtr 
                 for (size_t i = 0; i < g_mat_ref_list.size() - 1; ++i)
                     loop += g_mat_ref_list[i] + " => ";
                 loop += g_mat_ref_list[g_mat_ref_list.size() - 1];
-                LOG_ERROR("Detected circular dependency loop while processing ",
-                          g_mat_ref_list[0], "; ", loop, mat_ref_node->name);
-                return -1;
+
+                throw material::Error("detected circular dependency loop while processing " +
+                          g_mat_ref_list[0] + "; " + loop + mat_ref_node->name);
             }
         }
 
@@ -288,8 +294,7 @@ int32_t generate_material_tree(raw::MaterialPtr material, material::ExprNodePtr 
                 return generate_material(mat);
         }
 
-        LOG_ERROR("Material ", material->name, " references undefined material ", mat_ref_node->name);
-        return -1;
+        throw material::Error("undefined reference to `" + mat_ref_node->name + "`");
     }
     else if (auto bxdf_node = std::dynamic_pointer_cast<material::NBxdf>(expr_node))
     {
@@ -329,14 +334,51 @@ int32_t generate_material_tree(raw::MaterialPtr material, material::ExprNodePtr 
         {
             LOG_INFO("bxdf param: ", material::param_to_string(param.type), " - ",
                      param.value.vec[0], " ", param.value.vec[1], " ", param.value.vec[2], " ", param.value.name);
+
             switch (param.type)
             {
                 case material::REFLECTANCE:
                 case material::SPECULARITY:
                 case material::RADIANCE:
-                    ;
-                    //if (param.value.type == material::VECTOR)
-                    //    node.set_vec3()
+                    if (param.value.type == material::VECTOR)
+                        node.set_vec3(param.type, param.value.vec);
+                    else
+                        node.set_texture(param.type, bake_texture(material, param.value.name));
+                    break;
+                case material::TRANSMITTANCE:
+                    if (param.value.type == material::VECTOR)
+                        node.set_vec3(param.type, param.value.vec);
+                    else
+                        node.set_texture(param.type, bake_texture(material, param.value.name));
+                    break;
+                case material::INT_IOR:
+                case material::EXT_IOR: {
+                    uint32_t index = param.type == material::INT_IOR ? 0 : 1;
+                    if (param.value.type == material::NUM)
+                    {
+                        node.set_float(param.type, param.value.vec[0]);
+                    }
+                    else if (param.value.type == material::KNOWN_IOR)
+                    {
+                        try {
+                            node.set_float(param.type, material::get_known_ior(param.value.name));
+                        } catch (material::Error& e) {
+                            throw material::Error("Invalid intIOR reference for material " + material->name);
+                        }
+                    }
+                    break; }
+                case material::SCALER:
+                    node.set_float(param.type, param.value.vec[0]);
+                    break;
+                case material::ROUGHNESS:
+                    if (param.value.type == material::NUM)
+                        node.set_float(param.type, param.value.vec[0]);
+                    else if (param.value.type == material::TEXTURE)
+                        node.set_texture(param.type, bake_texture(material, param.value.name));
+                    break;
+
+                default:
+                    break;
             }
         }
     }

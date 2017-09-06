@@ -15,6 +15,7 @@ set(SCENE_HEADERS scene.h
                   raw_scene.h
                   obj_loader.h
                   material_node.h
+                  material_except.h
                   compiler.h
                   bvh_node.h
                   bvh_builder.h
