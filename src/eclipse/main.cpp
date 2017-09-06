@@ -2,7 +2,7 @@
 #include "eclipse/renderer/drawing.h"
 #include "eclipse/util/stop_watch.h"
 #include "eclipse/util/logger.h"
-#include "eclipse/scene/resource.h"
+#include "eclipse/util/resource.h"
 #include "eclipse/scene/obj_loader.h"
 #include "eclipse/scene/compiler.h"
 

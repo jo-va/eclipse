@@ -15,7 +15,7 @@
 
 namespace eclipse { namespace material {
 
-std::unique_ptr<ExprNode> parse_expr(const std::string& expr)
+ExprNodePtr parse_expr(const std::string& expr)
 {
     class ParsedExpression : public ParserCallback
     {
@@ -73,18 +73,18 @@ std::string node_to_string(NodeType node)
 {
     switch (node)
     {
-        case DIFFUSE:          return "diffuse";
-        case CONDUCTOR:        return "conductor";
-        case ROUGH_CONDUCTOR:  return "roughConductor";
-        case DIELECTRIC:       return "dielectric";
-        case ROUGH_DIELECTRIC: return "roughDielectric";
-        case EMISSIVE:         return "emissive";
-        case MIX:              return "mix";
-        case MIXMAP:           return "mixMap";
-        case BUMPMAP:          return "bumpMap";
-        case NORMALMAP:        return "normalMap";
-        case DISPERSE:         return "disperse";
-        default:               return "invalid";
+        case BXDF_DIFFUSE:          return "diffuse";
+        case BXDF_CONDUCTOR:        return "conductor";
+        case BXDF_ROUGH_CONDUCTOR:  return "roughConductor";
+        case BXDF_DIELECTRIC:       return "dielectric";
+        case BXDF_ROUGH_DIELECTRIC: return "roughDielectric";
+        case BXDF_EMISSIVE:         return "emissive";
+        case OP_MIX:                return "mix";
+        case OP_MIXMAP:             return "mixMap";
+        case OP_BUMPMAP:            return "bumpMap";
+        case OP_NORMALMAP:          return "normalMap";
+        case OP_DISPERSE:           return "disperse";
+        default:                    return "invalid";
     }
 }
 
@@ -137,7 +137,7 @@ void NBxdfParam::validate() const
 {
     switch (type)
     {
-    case INVALID_PARAM:
+    case PARAM_NONE:
         throw ValidationError("Invalid BXDF param type");
     case REFLECTANCE:
         if (value.type == VECTOR && (value.vec[0] >= 1.0f || value.vec[1] >= 1.0f || value.vec[2] >= 1.0f))
@@ -172,31 +172,31 @@ NBxdf::NBxdf(NodeType type, NBxdfParamList params)
 
 std::map<NodeType, std::vector<ParamType>> allowed_bxdf_params =
 {
-    { INVALID_NODE,     {                } },
-    { DIFFUSE,          { REFLECTANCE    } },
-    { EMISSIVE,         { RADIANCE,
-                          SCALER         } },
-    { CONDUCTOR,        { SPECULARITY,
-                          INT_IOR,
-                          EXT_IOR        } },
-    { ROUGH_CONDUCTOR,  { SPECULARITY,
-                          INT_IOR,
-                          EXT_IOR,
-                          ROUGHNESS      } },
-    { DIELECTRIC,       { SPECULARITY,
-                          TRANSMITTANCE,
-                          INT_IOR,
-                          EXT_IOR        } },
-    { ROUGH_DIELECTRIC, { SPECULARITY,
-                          TRANSMITTANCE,
-                          INT_IOR,
-                          EXT_IOR,
-                          ROUGHNESS      } }
+    { NODE_NONE,             {                } },
+    { BXDF_DIFFUSE,          { REFLECTANCE    } },
+    { BXDF_EMISSIVE,         { RADIANCE,
+                               SCALER         } },
+    { BXDF_CONDUCTOR,        { SPECULARITY,
+                               INT_IOR,
+                               EXT_IOR        } },
+    { BXDF_ROUGH_CONDUCTOR,  { SPECULARITY,
+                               INT_IOR,
+                               EXT_IOR,
+                               ROUGHNESS      } },
+    { BXDF_DIELECTRIC,       { SPECULARITY,
+                               TRANSMITTANCE,
+                               INT_IOR,
+                               EXT_IOR        } },
+    { BXDF_ROUGH_DIELECTRIC, { SPECULARITY,
+                               TRANSMITTANCE,
+                               INT_IOR,
+                               EXT_IOR,
+                               ROUGHNESS      } }
 };
 
 void NBxdf::validate() const
 {
-    if (type == INVALID_NODE)
+    if (type == NODE_NONE)
         throw ValidationError("Invalid BXDF type");
 
     for (auto& param : parameters)
@@ -223,7 +223,7 @@ void NMatRef::validate() const
 }
 
 NMix::NMix(ExprNode* left, ExprNode* right, float w)
-    : expressions{ std::unique_ptr<ExprNode>(left), std::unique_ptr<ExprNode>(right) }
+    : expressions{ std::shared_ptr<ExprNode>(left), std::shared_ptr<ExprNode>(right) }
     , weight(w)
 {
 }
@@ -250,7 +250,7 @@ void NMix::validate() const
 }
 
 NMixMap::NMixMap(ExprNode* left, ExprNode* right, ParamValue tex)
-    : expressions{ std::unique_ptr<ExprNode>(left), std::unique_ptr<ExprNode>(right) }
+    : expressions{ std::shared_ptr<ExprNode>(left), std::shared_ptr<ExprNode>(right) }
     , texture(tex.name)
 {
 }

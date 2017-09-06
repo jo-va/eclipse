@@ -4,9 +4,11 @@
 #include "eclipse/scene/bvh_builder.h"
 #include "eclipse/scene/mat_expr.h"
 #include "eclipse/scene/known_ior.h"
+#include "eclipse/util/except.h"
 #include "eclipse/scene/material_except.h"
 #include "eclipse/util/logger.h"
 #include "eclipse/util/stop_watch.h"
+#include "eclipse/util/texture.h"
 #include "eclipse/math/vec3.h"
 #include "eclipse/math/vec4.h"
 #include "eclipse/math/bbox.h"
@@ -31,6 +33,10 @@ std::unique_ptr<Scene> g_scene;
 
 // A map of material indices to their layered material tree roots
 std::map<uint32_t, int32_t> g_mat_index_to_mat_root;
+
+// A map of texture paths to their indices. This cache allows
+// us to reuse already loaded textures when referenced by multiple materials
+std::map<std::string, int32_t> g_texture_index_cache;
 
 // A list of material references for detecting circular loops
 std::vector<std::string> g_mat_ref_list;
@@ -219,6 +225,10 @@ void create_layered_material_tree()
         {
             g_mat_index_to_mat_root[mat_index] = generate_material(mat);
         }
+        catch (ResourceError& e)
+        {
+            LOG_ERROR("Resource error when processing material `", mat->name, "`: ", e.what());
+        }
         catch (material::ParseError& e)
         {
             LOG_ERROR("Expression parsing error for material `", mat->name, "`: ", e.what());
@@ -227,7 +237,7 @@ void create_layered_material_tree()
         {
             LOG_ERROR("Expression validation error for material `", mat->name, "`: ", e.what());
         }
-        catch (material::Error& e)
+        catch (Error& e)
         {
             LOG_ERROR("Error when processing material `", mat->name, "`: ", e.what());
         }
@@ -283,7 +293,7 @@ int32_t generate_material_tree(raw::MaterialPtr material, material::ExprNodePtr 
                     loop += g_mat_ref_list[i] + " => ";
                 loop += g_mat_ref_list[g_mat_ref_list.size() - 1];
 
-                throw material::Error("detected circular dependency loop while processing " +
+                throw Error("detected circular dependency loop while processing " +
                           g_mat_ref_list[0] + "; " + loop + mat_ref_node->name);
             }
         }
@@ -294,37 +304,37 @@ int32_t generate_material_tree(raw::MaterialPtr material, material::ExprNodePtr 
                 return generate_material(mat);
         }
 
-        throw material::Error("undefined reference to `" + mat_ref_node->name + "`");
+        throw Error("undefined reference to `" + mat_ref_node->name + "`");
     }
     else if (auto bxdf_node = std::dynamic_pointer_cast<material::NBxdf>(expr_node))
     {
         node.set_type(bxdf_node->type);
 
-        if (bxdf_node->type == material::DIFFUSE)
+        if (bxdf_node->type == material::BXDF_DIFFUSE)
         {
             node.set_vec3(material::REFLECTANCE, Vec3(material::defaults::Reflectance));
         }
-        else if (bxdf_node->type == material::CONDUCTOR)
+        else if (bxdf_node->type == material::BXDF_CONDUCTOR)
         {
             node.set_vec3(material::SPECULARITY, Vec3(material::defaults::Specularity));
         }
-        else if (bxdf_node->type == material::ROUGH_CONDUCTOR)
+        else if (bxdf_node->type == material::BXDF_ROUGH_CONDUCTOR)
         {
             node.set_vec3(material::SPECULARITY, Vec3(material::defaults::Specularity));
             node.set_float(material::ROUGHNESS, material::defaults::Roughness);
         }
-        else if (bxdf_node->type == material::DIELECTRIC)
+        else if (bxdf_node->type == material::BXDF_DIELECTRIC)
         {
             node.set_vec3(material::SPECULARITY, Vec3(material::defaults::Specularity));
             node.set_vec3(material::TRANSMITTANCE, Vec3(material::defaults::Transmittance));
         }
-        else if (bxdf_node->type == material::ROUGH_DIELECTRIC)
+        else if (bxdf_node->type == material::BXDF_ROUGH_DIELECTRIC)
         {
             node.set_vec3(material::SPECULARITY, Vec3(material::defaults::Specularity));
             node.set_vec3(material::TRANSMITTANCE, Vec3(material::defaults::Transmittance));
             node.set_float(material::ROUGHNESS, material::defaults::Roughness);
         }
-        else if (bxdf_node->type == material::EMISSIVE)
+        else if (bxdf_node->type == material::BXDF_EMISSIVE)
         {
             node.set_vec3(material::RADIANCE, Vec3(material::defaults::Radiance));
             node.set_float(material::SCALER, material::defaults::RadianceScaler);
@@ -332,8 +342,8 @@ int32_t generate_material_tree(raw::MaterialPtr material, material::ExprNodePtr 
 
         for (auto& param : bxdf_node->parameters)
         {
-            LOG_INFO("bxdf param: ", material::param_to_string(param.type), " - ",
-                     param.value.vec[0], " ", param.value.vec[1], " ", param.value.vec[2], " ", param.value.name);
+            //LOG_INFO("bxdf param: ", material::param_to_string(param.type), " - ",
+            //         param.value.vec[0], " ", param.value.vec[1], " ", param.value.vec[2], " ", param.value.name);
 
             switch (param.type)
             {
@@ -353,7 +363,6 @@ int32_t generate_material_tree(raw::MaterialPtr material, material::ExprNodePtr 
                     break;
                 case material::INT_IOR:
                 case material::EXT_IOR: {
-                    uint32_t index = param.type == material::INT_IOR ? 0 : 1;
                     if (param.value.type == material::NUM)
                     {
                         node.set_float(param.type, param.value.vec[0]);
@@ -362,8 +371,8 @@ int32_t generate_material_tree(raw::MaterialPtr material, material::ExprNodePtr 
                     {
                         try {
                             node.set_float(param.type, material::get_known_ior(param.value.name));
-                        } catch (material::Error& e) {
-                            throw material::Error("Invalid intIOR reference for material " + material->name);
+                        } catch (Error& e) {
+                            throw Error("Invalid intIOR reference for material " + material->name);
                         }
                     }
                     break; }
@@ -384,23 +393,40 @@ int32_t generate_material_tree(raw::MaterialPtr material, material::ExprNodePtr 
     }
     else if (auto mix_node = std::dynamic_pointer_cast<material::NMix>(expr_node))
     {
-
+        node.set_type(material::OP_MIX);
+        node.set_left_child(generate_material_tree(material, mix_node->expressions[0]));
+        node.set_right_child(generate_material_tree(material, mix_node->expressions[1]));
+        node.set_float(material::WEIGHT, mix_node->weight);
     }
     else if (auto mix_map_node = std::dynamic_pointer_cast<material::NMixMap>(expr_node))
     {
-
+        node.set_type(material::OP_MIXMAP);
+        node.set_left_child(generate_material_tree(material, mix_map_node->expressions[0]));
+        node.set_right_child(generate_material_tree(material, mix_map_node->expressions[1]));
+        node.set_texture(material::PARAM_NONE, bake_texture(material, mix_map_node->texture));
     }
     else if (auto bump_map_node = std::dynamic_pointer_cast<material::NBumpMap>(expr_node))
     {
-
+        node.set_type(material::OP_BUMPMAP);
+        node.set_left_child(generate_material_tree(material, bump_map_node->expression));
+        node.set_texture(material::PARAM_NONE, bake_texture(material, bump_map_node->texture));
     }
     else if (auto normal_map_node = std::dynamic_pointer_cast<material::NNormalMap>(expr_node))
     {
-
+        node.set_type(material::OP_NORMALMAP);
+        node.set_left_child(generate_material_tree(material, normal_map_node->expression));
+        node.set_texture(material::PARAM_NONE, bake_texture(material, normal_map_node->texture));
     }
     else if (auto disperse_node = std::dynamic_pointer_cast<material::NDisperse>(expr_node))
     {
-
+        node.set_type(material::OP_DISPERSE);
+        node.set_left_child(generate_material_tree(material, disperse_node->expression));
+        node.set_vec3(material::INT_IOR, disperse_node->int_ior);
+        node.set_vec3(material::EXT_IOR, disperse_node->ext_ior);
+    }
+    else
+    {
+        throw Error("unsupported expression node");
     }
 
     g_scene->material_nodes.push_back(node);
@@ -408,8 +434,33 @@ int32_t generate_material_tree(raw::MaterialPtr material, material::ExprNodePtr 
     return int32_t(g_scene->material_nodes.size() - 1);
 }
 
+// Load a texture resource and store its data into the scene.
+// Texture data is always aligned on a dword boundary.
 int32_t bake_texture(raw::MaterialPtr material, const std::string& texture)
 {
+    std::shared_ptr<Resource> res;
+    try
+    {
+        res = std::make_shared<Resource>(texture, material->resource);
+    }
+    catch (ResourceError& e)
+    {
+        LOG_WARNING(material->name, ": skipping missing texture ", texture);
+        return -1;
+    }
+
+    // Check if the texture is already loaded
+    auto cache_iter = g_texture_index_cache.find(texture);
+    if (cache_iter != g_texture_index_cache.end())
+    {
+        LOG_INFO(material->name, ": reusing already loaded texture ", texture);
+        return cache_iter->second;
+    }
+
+    LOG_INFO(material->name, ": processing texture ", texture);
+
+    auto tex = std::make_shared<Texture>(res);
+
     return -1;
 }
 

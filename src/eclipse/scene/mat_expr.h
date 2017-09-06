@@ -12,23 +12,23 @@ namespace eclipse { namespace material {
 
 enum NodeType
 {
-    INVALID_NODE,
-    DIFFUSE,
-    CONDUCTOR,
-    ROUGH_CONDUCTOR,
-    DIELECTRIC,
-    ROUGH_DIELECTRIC,
-    EMISSIVE,
-    MIX,
-    MIXMAP,
-    BUMPMAP,
-    NORMALMAP,
-    DISPERSE
+    NODE_NONE,
+    BXDF_DIFFUSE,
+    BXDF_CONDUCTOR,
+    BXDF_ROUGH_CONDUCTOR,
+    BXDF_DIELECTRIC,
+    BXDF_ROUGH_DIELECTRIC,
+    BXDF_EMISSIVE,
+    OP_MIX,
+    OP_MIXMAP,
+    OP_BUMPMAP,
+    OP_NORMALMAP,
+    OP_DISPERSE
 };
 
 enum ParamType
 {
-    INVALID_PARAM,
+    PARAM_NONE,
     REFLECTANCE,
     SPECULARITY,
     TRANSMITTANCE,
@@ -49,7 +49,7 @@ public:
 
 typedef std::shared_ptr<ExprNode> ExprNodePtr;
 
-std::unique_ptr<ExprNode> parse_expr(const std::string& expr);
+ExprNodePtr parse_expr(const std::string& expr);
 
 std::string node_to_string(NodeType bxdf);
 std::string param_to_string(ParamType param);
@@ -121,7 +121,7 @@ public:
 class NMix : public OpNode
 {
 public:
-    std::unique_ptr<ExprNode> expressions[2];
+    ExprNodePtr expressions[2];
     float weight;
 
     explicit NMix(ExprNode* left, ExprNode* right, float w);
@@ -131,7 +131,7 @@ public:
 class NMixMap : public OpNode
 {
 public:
-    std::unique_ptr<ExprNode> expressions[2];
+    ExprNodePtr expressions[2];
     std::string texture;
 
     explicit NMixMap(ExprNode* left, ExprNode* right, ParamValue tex);
@@ -141,7 +141,7 @@ public:
 class NBumpMap : public OpNode
 {
 public:
-    std::unique_ptr<ExprNode> expression;
+    ExprNodePtr expression;
     std::string texture;
 
     explicit NBumpMap(ExprNode* expr, ParamValue tex);
@@ -151,7 +151,7 @@ public:
 class NNormalMap : public OpNode
 {
 public:
-    std::unique_ptr<ExprNode> expression;
+    ExprNodePtr expression;
     std::string texture;
 
     explicit NNormalMap(ExprNode* expr, ParamValue tex);
@@ -161,7 +161,7 @@ public:
 class NDisperse : public OpNode
 {
 public:
-    std::unique_ptr<ExprNode> expression;
+    ExprNodePtr expression;
     Vec3 int_ior;
     Vec3 ext_ior;
 

@@ -11,7 +11,7 @@ HTTPDownloader::HTTPDownloader()
 {
     m_curl = (void*)curl_easy_init();
     if (!m_curl)
-        LOG_ERROR("Can't initialize CURL");
+        throw HTTPError("Can't initialize curl");
 }
 
 HTTPDownloader::~HTTPDownloader()
@@ -38,10 +38,7 @@ std::string HTTPDownloader::get(const std::string& url)
 {
     std::string read_buffer;
     if (!m_curl)
-    {
-        LOG_ERROR("Curl not initialized");
-        return read_buffer;
-    }
+        throw HTTPError("can't get URL, curl is not initialized");
 
     curl_easy_setopt((CURL*)m_curl, CURLOPT_URL, url.c_str());
     curl_easy_setopt((CURL*)m_curl, CURLOPT_SSL_VERIFYPEER, 0L);
@@ -55,21 +52,18 @@ std::string HTTPDownloader::get(const std::string& url)
 
     CURLcode res = curl_easy_perform((CURL*)m_curl);
     if (res != CURLE_OK)
-        LOG_ERROR("Failed to download [", url, "]: ", curl_easy_strerror(res));
+        throw HTTPError("Failed to download [" + url + "]: " + curl_easy_strerror(res));
 
     return read_buffer;
 }
 
-bool HTTPDownloader::save_to_file(const std::string& url, const std::string& filepath)
+void HTTPDownloader::save_to_file(const std::string& url, const std::string& filepath)
 {
     std::ofstream file_stream;
     file_stream.open(filepath, std::ios::trunc | std::ios::out);
 
     if (!m_curl)
-    {
-        LOG_ERROR("Curl not initialized");
-        return false;
-    }
+        throw HTTPError("Can't save " + url + " to " + filepath + ": Curl is not initialized");
 
     curl_easy_setopt((CURL*)m_curl, CURLOPT_URL, url.c_str());
     curl_easy_setopt((CURL*)m_curl, CURLOPT_SSL_VERIFYPEER, 0L);
@@ -83,11 +77,9 @@ bool HTTPDownloader::save_to_file(const std::string& url, const std::string& fil
 
     CURLcode res = curl_easy_perform((CURL*)m_curl);
     if (res != CURLE_OK)
-        LOG_ERROR("Failed to download [", url, "]: ", curl_easy_strerror(res));
+        throw HTTPError("Failed to download [" + url + "]: " + curl_easy_strerror(res));
 
     file_stream.close();
-
-    return true;
 }
 
 } // namespace eclipse

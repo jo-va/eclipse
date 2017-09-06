@@ -11,7 +11,6 @@ ADD_FLEX_BISON_DEPENDENCY(mat_expr_scanner mat_expr_parser)
 include_directories(${CMAKE_BINARY_DIR}/src)
 
 set(SCENE_HEADERS scene.h
-                  resource.h
                   raw_scene.h
                   obj_loader.h
                   material_node.h
@@ -23,8 +22,7 @@ set(SCENE_HEADERS scene.h
                   mat_expr.h
                   mat_expr_scanner.h)
 
-set(SCENE_SOURCES resource.cpp
-                  obj_loader.cpp
+set(SCENE_SOURCES obj_loader.cpp
                   material_node.cpp
                   compiler.cpp
                   known_ior.cpp
@@ -33,4 +31,4 @@ set(SCENE_SOURCES resource.cpp
                   ${CMAKE_CURRENT_BINARY_DIR}/mat_expr_scanner.cxx)
 
 add_library(eclipse_scene ${SCENE_HEADERS} ${SCENE_SOURCES})
-target_link_libraries(eclipse_scene eclipse_math eclipse_util)
+target_link_libraries(eclipse_scene eclipse_math eclipse_util ${OPENIMAGEIO_LIBRARY})

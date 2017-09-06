@@ -1,5 +1,4 @@
 #include "eclipse/scene/obj_loader.h"
-#include "eclipse/scene/resource.h"
 #include "eclipse/scene/raw_scene.h"
 #include "eclipse/scene/compiler.h"
 #include "eclipse/scene/mat_expr.h"
@@ -8,6 +7,7 @@
 #include "eclipse/math/transform.h"
 #include "eclipse/util/logger.h"
 #include "eclipse/util/stop_watch.h"
+#include "eclipse/util/resource.h"
 
 #include <cstdint>
 #include <cstddef>
@@ -45,7 +45,7 @@ struct Material
 
     ~Material()
     {
-        LOG_DEBUG("obj::Material ", name, " deleted");
+        //LOG_DEBUG("obj::Material ", name, " deleted");
     }
 };
 
@@ -141,7 +141,7 @@ std::string Material::get_expression()
 
     if (is_specular_reflection && Ni == 0.0f)
     {
-        bxdf = material::CONDUCTOR;
+        bxdf = material::BXDF_CONDUCTOR;
         if (!Ks_tex.empty())
             expr_args.push_back(std::string(material::Specularity) + ": " + Ks_tex);
         else if (max_component(Ks) > 0.0f)
@@ -149,7 +149,7 @@ std::string Material::get_expression()
     }
     else if (is_specular_reflection && Ni != 0.0f)
     {
-        bxdf = material::DIELECTRIC;
+        bxdf = material::BXDF_DIELECTRIC;
         if (!Ks_tex.empty())
             expr_args.push_back(std::string(material::Specularity) + ": " + Ks_tex);
         else if (max_component(Ks) > 0.0f)
@@ -164,7 +164,7 @@ std::string Material::get_expression()
     }
     else if (is_emissive)
     {
-        bxdf = material::EMISSIVE;
+        bxdf = material::BXDF_EMISSIVE;
         if (!Ke_tex.empty())
             expr_args.push_back(std::string(material::Radiance) + ": " + Ke_tex);
         else if (max_component(Ke) > 0.0f)
@@ -175,7 +175,7 @@ std::string Material::get_expression()
     }
     else
     {
-        bxdf = material::DIFFUSE;
+        bxdf = material::BXDF_DIFFUSE;
         if (!Kd_tex.empty())
             expr_args.push_back(std::string(material::Reflectance) + ": " + Kd_tex);
         else if (max_component(Kd) > 0.0f)
@@ -251,7 +251,7 @@ void process_materials()
         // Prune unused materials
         if (!obj_mat->used)
         {
-            LOG_INFO("Skipping unused material ", obj_mat->name);
+            LOG_WARNING("Skipping unused material ", obj_mat->name);
             auto pruned_mat = std::make_shared<raw::Material>();
             pruned_mat->name = obj_mat->name;
             pruned_mat->expression = obj_mat->get_expression();

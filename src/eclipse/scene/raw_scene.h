@@ -5,7 +5,7 @@
 #include "eclipse/math/vec3.h"
 #include "eclipse/math/bbox.h"
 #include "eclipse/math/transform.h"
-#include "eclipse/scene/resource.h"
+#include "eclipse/util/resource.h"
 #include "eclipse/util/logger.h"
 
 #include <vector>
@@ -56,7 +56,7 @@ struct Mesh
 
     ~Mesh()
     {
-        LOG_DEBUG("Mesh ", name, " deleted");
+        //LOG_DEBUG("Mesh ", name, " deleted");
     }
 };
 
@@ -75,7 +75,7 @@ struct MeshInstance
 
     ~MeshInstance()
     {
-        LOG_DEBUG("MeshInstance ", mesh_index, " deleted");
+        //LOG_DEBUG("MeshInstance ", mesh_index, " deleted");
     }
 };
 
@@ -92,7 +92,7 @@ struct Material
 
     ~Material()
     {
-        LOG_DEBUG("Material ", name, " deleted");
+        //LOG_DEBUG("Material ", name, " deleted");
     }
 };
 

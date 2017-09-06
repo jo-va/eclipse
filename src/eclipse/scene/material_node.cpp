@@ -93,9 +93,9 @@ void Node::set_texture(ParamType param_type, int32_t texture)
     else if (param_type == REFLECTANCE ||
              param_type == SPECULARITY ||
              param_type == RADIANCE    ||
-             type == MIXMAP            ||
-             type == BUMPMAP           ||
-             type == NORMALMAP)
+             type == OP_MIXMAP         ||
+             type == OP_BUMPMAP        ||
+             type == OP_NORMALMAP)
     {
         ptr[3] = texture;
     }

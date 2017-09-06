@@ -1,7 +1,8 @@
 #pragma once
 
+#include "eclipse/util/except.h"
+
 #include <istream>
-#include <stdexcept>
 
 #undef yyFlexLexer
 #include <FlexLexer.h>
@@ -32,11 +33,11 @@ public:
     int lex(MatExprParser::semantic_type* yylval, MatExprParser::location_type* yylloc);
 };
 
-class MatExprSyntaxError : public std::runtime_error
+class MatExprSyntaxError : public Error
 {
 public:
     MatExprSyntaxError(const MatExprParser::location_type& l, const std::string& m)
-        : std::runtime_error(m), location(l)
+        : Error(m), location(l)
     {
     }
 

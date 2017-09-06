@@ -1,10 +1,18 @@
 #pragma once
 
+#include "eclipse/util/except.h"
+
 #include <string>
 #include <fstream>
 #include <memory>
 
 namespace eclipse {
+
+class ResourceError : public Error
+{
+public:
+    ResourceError(const std::string& m) : Error(m) { }
+};
 
 class Resource
 {
