@@ -10,7 +10,7 @@
 namespace eclipse {
 
 Texture::Texture(std::shared_ptr<Resource> res)
-    : m_pixels(nullptr)
+    : m_size(0), m_pixels(nullptr)
 {
     OIIO::ImageInput* input = OIIO::ImageInput::open(res->get_path());
     if (!input)
@@ -67,6 +67,8 @@ Texture::Texture(std::shared_ptr<Resource> res)
         OIIO::ImageInput::destroy(input);
         throw TextureError("texture: could not read pixels from " + res->get_path() + ": " + error);
     }
+
+    m_size = data.size();
 
     // convert to RGBA as this makes addressing in opencl much easier
     if (convert_to == OIIO::TypeDesc::UINT8 && spec.nchannels == 3)

@@ -54,6 +54,8 @@ ExprNodePtr parse_expr(const std::string& expr);
 std::string node_to_string(NodeType bxdf);
 std::string param_to_string(ParamType param);
 
+bool is_bxdf_type(NodeType type);
+
 enum ParamValueType
 {
     NUM = 0,

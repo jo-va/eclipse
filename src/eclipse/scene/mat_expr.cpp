@@ -105,6 +105,11 @@ std::string param_to_string(ParamType param)
     }
 }
 
+bool is_bxdf_type(NodeType type)
+{
+    return type >= BXDF_DIFFUSE && type <= BXDF_EMISSIVE;
+}
+
 ParamValue ParamValue::num(float v)
 {
     return { NUM, Vec3(v, 0, 0), "" };

@@ -15,6 +15,9 @@
 
 #include <memory>
 #include <map>
+#include <vector>
+#include <algorithm>
+#include <iterator>
 #include <cstring>
 
 namespace eclipse { namespace scene {
@@ -32,11 +35,14 @@ std::shared_ptr<raw::Scene> g_raw_scene;
 std::unique_ptr<Scene> g_scene;
 
 // A map of material indices to their layered material tree roots
-std::map<uint32_t, int32_t> g_mat_index_to_mat_root;
+std::map<int32_t, int32_t> g_mat_index_to_mat_root;
 
 // A map of texture paths to their indices. This cache allows
 // us to reuse already loaded textures when referenced by multiple materials
 std::map<std::string, int32_t> g_texture_index_cache;
+
+// A map of material indices to an emissive layered material tree node.
+std::map<int32_t, int32_t> g_emissive_index_cache;
 
 // A list of material references for detecting circular loops
 std::vector<std::string> g_mat_ref_list;
@@ -45,9 +51,9 @@ std::vector<std::string> g_mat_ref_list;
 
 std::unique_ptr<Scene> compile(std::shared_ptr<raw::Scene> raw_scene)
 {
-    LOG_INFO("Compiling scene");
     StopWatch stop_watch;
     stop_watch.start();
+    LOG_INFO("Compiling scene");
 
     g_raw_scene = raw_scene;
     g_scene = std::make_unique<Scene>();
@@ -131,10 +137,12 @@ void partition_geometry()
     uint32_t vertex_offset = 0;
     uint32_t tri_offset = 0;
     std::vector<uint32_t> mesh_bvh_roots(g_raw_scene->meshes.size());
+    std::vector<EmissivePrimitive> mesh_emissive_primitives;
+    std::map<int32_t, uint32_t> emissive_index_to_mesh_index_map;
 
-    for (size_t index = 0; index < g_raw_scene->meshes.size(); ++index)
+    for (size_t mesh_index = 0; mesh_index < g_raw_scene->meshes.size(); ++mesh_index)
     {
-        auto& mesh = g_raw_scene->meshes[index];
+        auto& mesh = g_raw_scene->meshes[mesh_index];
 
         LOG_INFO("Building BVH tree for ", mesh->name, " (", mesh->triangles.size(), " triangles)");
 
@@ -157,11 +165,27 @@ void partition_geometry()
                 g_scene->uvs[vertex_offset + 1] = tri.uvs[1];
                 g_scene->uvs[vertex_offset + 2] = tri.uvs[2];
 
-                // TODO:Lookup root material node for primitive material index
-                //uint32_t mat_node_index = g_mat_index_to_mat_root[tri.material_index];
-                //g_scene->material_indices[tri_offset] = uint32_t(mat_node_index);
+                // Lookup root material node for primitive material index
+                int32_t mat_node_index = g_mat_index_to_mat_root[tri.material_index];
+                g_scene->material_indices[tri_offset] = uint32_t(mat_node_index);
 
-                // TODO:Find emissive materials here
+                // Check if this is an emissive primitive and keep track of it
+                // Since we may use multiple instances of this mesh, we need a
+                // separate pass to generate a primitive for each mesh instance
+                int32_t emissive_node_index = g_emissive_index_cache[tri.material_index];
+                if (emissive_node_index != -1)
+                {
+                    EmissivePrimitive eprim;
+                    eprim.type = AreaLight;
+                    eprim.primitive_index = tri_offset;
+                    eprim.material_index = uint32_t(emissive_node_index);
+                    eprim.area = 0.5f * length(cross(tri.vertices[2] - tri.vertices[0],
+                                                     tri.vertices[2] - tri.vertices[1]));
+
+                    mesh_emissive_primitives.push_back(eprim);
+
+                    emissive_index_to_mesh_index_map[mesh_emissive_primitives.size() - 1] = uint32_t(mesh_index);
+                }
 
                 vertex_offset += 3;
                 ++tri_offset;
@@ -173,7 +197,7 @@ void partition_geometry()
                 mesh->triangles, min_primitives_per_leaf, tri_leaf_cb);
 
         int32_t offset = (int32_t)g_scene->bvh_nodes.size();
-        mesh_bvh_roots[index] = uint32_t(offset);
+        mesh_bvh_roots[mesh_index] = uint32_t(offset);
         for (size_t i = 0; i < bvh_nodes.size(); ++i)
             bvh_nodes[i].offset_child_nodes(offset);
 
@@ -193,6 +217,42 @@ void partition_geometry()
         mesh_inst->transform = raw_mesh_inst->transform.inv;
     }
 
+    LOG_INFO("Creating emissive primitive copies for mesh instances");
+
+    // For each unique emissive primitive for the scene's meshes we need to
+    // create a clone for each one of the mesh instances and fill in the
+    // appropriate transformation matrix.
+    for (auto& mesh_inst : g_scene->mesh_instances)
+    {
+        for (auto& it : emissive_index_to_mesh_index_map)
+        {
+            if (mesh_inst.mesh_index != it.second)
+                continue;
+
+            // Copy original primitive and setup transformation matrix
+            auto eprim = mesh_emissive_primitives[it.first];
+            eprim.transform = mesh_inst.transform;
+            g_scene->emissive_primitives.push_back(eprim);
+        }
+    }
+
+    // If a global emission map is defined for the scene, create an emissive for it
+    if (g_scene->scene_emissive_mat_index != -1 &&
+            g_emissive_index_cache[int32_t(g_scene->scene_emissive_mat_index)] != -1)
+    {
+        EmissivePrimitive eprim;
+        eprim.material_index = uint32_t(g_emissive_index_cache[int32_t(g_scene->scene_emissive_mat_index)]);
+        eprim.type = EnvironmentLight;
+
+        g_scene->emissive_primitives.push_back(eprim);
+    }
+
+    if (g_scene->emissive_primitives.size() > 0)
+        LOG_INFO("Emitted ", g_scene->emissive_primitives.size(), " emissive primitives ",
+                 "for all mesh instances (", mesh_emissive_primitives.size(), " unique mesh emissives)");
+    else
+        LOG_WARNING("The scene contains no emissive primitives or a global environment light; output will appear black!");
+
     stop_watch.stop();
     LOG_INFO("Partioned geometry in ", stop_watch.get_elapsed_time_ms(), " ms");
 }
@@ -202,12 +262,42 @@ void setup_camera()
     // TODO:
 }
 
+// Performs a DFS in a layered material tree trying to locate a node with a particular BXDF.
+int32_t find_material_node_by_bxdf(uint32_t node_index, material::NodeType bxdf)
+{
+    material::Node& node = g_scene->material_nodes[node_index];
+    material::NodeType node_type = node.get_type();
+
+    // This is a BXDF node
+    if (material::is_bxdf_type(node_type))
+    {
+        if (node_type == bxdf)
+            return int32_t(node_index);
+        return -1;
+    }
+
+    // This is an operation node
+    int32_t out = find_material_node_by_bxdf(uint32_t(node.get_left_child()), bxdf);
+    if (out != -1)
+        return out;
+
+    // If this is a mix node descend into the right child
+    if (node_type == material::OP_MIX || node_type == material::OP_MIXMAP)
+        out = find_material_node_by_bxdf(uint32_t(node.get_right_child()), bxdf);
+
+    return out;
+}
+
 // Parse material definitions into a node-based structure that models a layered material.
 void create_layered_material_tree()
 {
     StopWatch stop_watch;
     stop_watch.start();
     LOG_INFO("Processing ", g_raw_scene->materials.size(), " materials");
+
+    g_mat_index_to_mat_root.clear();
+    g_texture_index_cache.clear();
+    g_emissive_index_cache.clear();
 
     for (size_t mat_index = 0; mat_index < g_raw_scene->materials.size(); ++mat_index)
     {
@@ -218,6 +308,8 @@ void create_layered_material_tree()
         // processed while compiling material expressions
         if (!mat->used)
             continue;
+
+        g_mat_ref_list.clear();
 
         LOG_INFO("Processing material ", mat->name);
 
@@ -242,10 +334,11 @@ void create_layered_material_tree()
             LOG_ERROR("Error when processing material `", mat->name, "`: ", e.what());
         }
 
-        // TODO: fill emssive_index_cache
+        g_emissive_index_cache[mat_index] = find_material_node_by_bxdf(uint32_t(g_mat_index_to_mat_root[mat_index]), material::BXDF_EMISSIVE);
 
         if (mat->name == SceneDiffuseMaterialName)
             g_scene->scene_diffuse_mat_index = g_mat_index_to_mat_root[mat_index];
+
         if (mat->name == SceneEmissiveMaterialName)
             g_scene->scene_emissive_mat_index = g_mat_index_to_mat_root[mat_index];
     }
@@ -450,14 +543,14 @@ int32_t bake_texture(raw::MaterialPtr material, const std::string& tex_name)
     }
 
     // Check if the texture is already loaded
-    auto cache_iter = g_texture_index_cache.find(tex_name);
+    auto cache_iter = g_texture_index_cache.find(res->get_path());
     if (cache_iter != g_texture_index_cache.end())
     {
-        LOG_INFO(material->name, ": reusing already loaded texture ", tex_name);
+        LOG_INFO(material->name, ": reusing already loaded texture ", res->get_path());
         return cache_iter->second;
     }
 
-    LOG_INFO(material->name, ": processing texture ", tex_name);
+    LOG_INFO(material->name, ": processing texture ", res->get_path());
 
     std::shared_ptr<Texture> texture;
     try
@@ -469,7 +562,32 @@ int32_t bake_texture(raw::MaterialPtr material, const std::string& tex_name)
         throw TextureError(material->name + e.what());
     }
 
-    return -1;
+    uint32_t offset = g_scene->texture_data.size();
+    uint32_t real_size = texture->get_size();
+    uint32_t aligned_size = (real_size % 4 == 0) ? real_size : real_size + 1;
+
+    // Copy data and add alignement padding
+    uint8_t* data = texture->get_data();
+    g_scene->texture_data.reserve(g_scene->texture_data.size() + aligned_size);
+    std::copy(&data[0], &data[real_size], std::back_inserter(g_scene->texture_data));
+    while (aligned_size > real_size)
+    {
+        g_scene->texture_data.push_back(0);
+        ++real_size;
+    }
+
+    TextureMetadata metadata;
+    metadata.format = texture->get_format();
+    metadata.width = texture->get_width();
+    metadata.height = texture->get_height();
+    metadata.offset = offset;
+
+    g_scene->texture_metadata.push_back(metadata);
+
+    int32_t tex_index = int32_t(g_scene->texture_metadata.size() - 1);
+    g_texture_index_cache[res->get_path()] = tex_index;
+
+    return tex_index;
 }
 
 } // anonymous namespace

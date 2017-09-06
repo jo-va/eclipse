@@ -39,9 +39,14 @@ Node::Node()
     iptr[15] = -1;
 }
 
-void Node::set_type(uint32_t type)
+void Node::set_type(NodeType type)
 {
-    *alias_cast<uint32_t*>(data) = type;
+    *alias_cast<NodeType*>(data) = type;
+}
+
+NodeType Node::get_type() const
+{
+    return *alias_cast<NodeType*>(data);
 }
 
 void Node::set_vec3(ParamType param_type, const Vec3& v)
@@ -113,6 +118,16 @@ void Node::set_left_child(int32_t left)
 void Node::set_right_child(int32_t right)
 {
     *alias_cast<int32_t*>(data + 2) = right;
+}
+
+int32_t Node::get_left_child() const
+{
+    return *alias_cast<int32_t*>(data + 1);
+}
+
+int32_t Node::get_right_child() const
+{
+    return *alias_cast<int32_t*>(data + 2);
 }
 
 } } // namespace eclipse::material

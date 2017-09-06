@@ -22,11 +22,12 @@ constexpr char  ExtIOR[]         = "Air";
 
 struct Node
 {
-    uint8_t data[64];
+    uint32_t data[16];
 
     Node();
 
-    void set_type(uint32_t type);
+    void set_type(NodeType type);
+    NodeType get_type() const;
 
     void set_vec3(ParamType param_type, const Vec3& v);
     void set_float(ParamType param_type, float v);
@@ -34,6 +35,9 @@ struct Node
 
     void set_left_child(int32_t left);
     void set_right_child(int32_t right);
+
+    int32_t get_left_child() const;
+    int32_t get_right_child() const;
 } __packed;
 
 } } // namespace eclipse::material
