@@ -7,3 +7,4 @@ add_subdirectory(renderer)
 add_executable(eclipse main.cpp)
 target_link_libraries(eclipse eclipse_math eclipse_util eclipse_scene eclipse_tracer eclipse_renderer)
 
+install(TARGETS eclipse DESTINATION bin)

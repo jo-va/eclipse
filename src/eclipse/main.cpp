@@ -4,6 +4,7 @@
 #include "eclipse/util/logger.h"
 #include "eclipse/util/resource.h"
 #include "eclipse/util/file_util.h"
+#include "eclipse/util/input_parser.h"
 #include "eclipse/scene/scene.h"
 #include "eclipse/scene/scene_io.h"
 
@@ -16,29 +17,87 @@
 using namespace eclipse;
 
 namespace {
-    const uint32_t g_width = 640;
-    const uint32_t g_height = 512;
     auto logger = Logger::create("main");
 }
 
-int main(int argc, char* argv[])
+int main(int argc, char** argv)
 {
-    try
+    InputParser input(argc, argv);
+
+    if (input.option_exists("--help") || argc == 1)
     {
-        if (argc > 1)
+        std::cout << "Eclipse - Path tracing renderer\n\n"
+                  << "usage: eclipse --help\n"
+                  << "usage: eclipse --info [scene.(obj|bin)]\n"
+                  << "usage: eclipse --compile [scene.obj]\n"
+                  << "usage: eclipse --list-devices\n"
+                  << "usage: eclipse --render [scene.(obj|bin)]\n\n"
+                  << "options in order of precedence:\n"
+                  << "       --help         Print this menu\n"
+                  << "       --info         Print scene statistics\n"
+                  << "       --list-devices List the available rendering devices\n"
+                  << "       --compile      Compile scene to a compressed binary format\n"
+                  << "       --render       Render a scene\n";
+    }
+    else if (input.option_exists("--info"))
+    {
+        try
         {
-            std::shared_ptr<Resource> r = std::make_shared<Resource>(argv[1]);
-            std::shared_ptr<scene::Scene> s1 = scene::read(r);
-            if (has_extension(r->get_path(), ".obj"))
-                scene::write(s1, r);
-            logger.log<INFO>(s1->get_stats());
+            std::string scene_file = input.get_option("--info");
+            if (!scene_file.empty())
+            {
+                std::shared_ptr<Resource> scene_res = std::make_shared<Resource>(scene_file);
+                std::shared_ptr<scene::Scene> scene = scene::read(scene_res);
+
+                std::string stats = scene->get_stats();
+                logger.log<INFO>(stats);
+            }
+            else
+            {
+                logger.log<WARNING>("no scene specified");
+            }
+        }
+        catch (std::exception& e)
+        {
+            logger.log<ERROR>("Exception caught: ", e.what());
         }
     }
-    catch (std::exception& e)
+    else if (input.option_exists("--list-devices"))
     {
-        logger.log<ERROR>("Exception caught: ", e.what());
+    }
+    else if (input.option_exists("--compile"))
+    {
+        try
+        {
+            std::string scene_file = input.get_option("--compile");
+            if (!scene_file.empty())
+            {
+                std::shared_ptr<Resource> scene_res = std::make_shared<Resource>(scene_file);
+                if (has_extension(scene_res->get_path(), ".bin"))
+                {
+                    logger.log<WARNING>("scene ", scene_res->get_path(), " already compiled");
+                }
+                else
+                {
+                    std::shared_ptr<scene::Scene> scene = scene::read(scene_res);
+                    scene::write(scene, scene_res);
+                }
+            }
+            else
+            {
+                logger.log<WARNING>("no scene specifed");
+            }
+        }
+        catch (std::exception& e)
+        {
+            logger.log<ERROR>("Exception caught: ", e.what());
+        }
+    }
+    else if (input.option_exists("--render"))
+    {
     }
 
+    /*
     Window window(g_width, g_height, "Eclipse renderer");
 
     bool pause = false;
@@ -100,6 +159,7 @@ int main(int argc, char* argv[])
 
     delete[] accum;
     window.release();
+    */
 
     return 0;
 }

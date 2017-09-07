@@ -24,7 +24,6 @@ Texture::Texture(std::shared_ptr<Resource> res)
     if (spec.nchannels != 1 && spec.nchannels != 3 && spec.nchannels != 4)
     {
         input->close();
-        //ImageInput::destroy(input);
         throw TextureError("texture: unsupported channel count " + std::to_string(spec.nchannels) +
                            " while loading " + res->get_path());
     }
@@ -32,7 +31,6 @@ Texture::Texture(std::shared_ptr<Resource> res)
     if (spec.depth != 1)
     {
         input->close();
-        //ImageInput::destroy(input);
         throw TextureError("texture: unsupported depth " + std::to_string(spec.depth) +
                            " while loading " + res->get_path());
     }
@@ -64,7 +62,6 @@ Texture::Texture(std::shared_ptr<Resource> res)
     {
         std::string error = input->geterror();
         input->close();
-        //ImageInput::destroy(input);
         throw TextureError("texture: could not read pixels from " + res->get_path() + ": " + error);
     }
 
@@ -112,10 +109,8 @@ Texture::Texture(std::shared_ptr<Resource> res)
 
     if (!input->close())
     {
-        //ImageInput::destroy(input);
         throw TextureError("texture: could not close " + res->get_path());
     }
-    //ImageInput::destroy(input);
 }
 
 Texture::~Texture()

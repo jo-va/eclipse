@@ -107,7 +107,7 @@ std::string Scene::get_stats() const
 {
     std::stringstream ss;
 
-    ss << "Scene statistics:\n\n";
+    ss << "scene statistics:\n\n";
 
     size_t total_size = vec_size(vertices) + vec_size(normals) + vec_size(uvs) + vec_size(bvh_nodes) +
                         vec_size(mesh_instances) + vec_size(emissive_primitives) +
