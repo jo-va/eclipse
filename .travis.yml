@@ -34,11 +34,11 @@ install:
   - cd ..
    # Build OpenEXR
   - git clone https://github.com/openexr/openexr && cd openexr
-  - cd IlmBase && cmake . && make && make install
+  - cd IlmBase && cmake . && make && sudo make install
   - cd ..
-  - cd OpenEXR && cmake . && make && make install
+  - cd OpenEXR && cmake . && make && sudo make install
   - cd ..
    # Build OpenImageIO
   - git clone https://github.com/OpenImageIO/oiio.git && cd oiio
-  - make && make install
+  - make && sudo make install
   - cd ../..
