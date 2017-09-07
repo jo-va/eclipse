@@ -8,8 +8,11 @@ set(MATH_HEADERS math.h
                  transform.h)
 
 set(MATH_SOURCES math.cpp
+                 vec2.cpp
                  vec3.cpp
+                 vec4.cpp
                  mat4.cpp
+                 bbox.cpp
                  quaternion.cpp
                  transform.cpp)
 

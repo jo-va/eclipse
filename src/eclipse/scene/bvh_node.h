@@ -3,6 +3,8 @@
 #include "eclipse/math/bbox.h"
 
 #include <cstdint>
+#include <ostream>
+#include <istream>
 
 namespace eclipse { namespace bvh {
 
@@ -54,5 +56,8 @@ struct Node
         right_data = int32_t(right);
     }
 };
+
+std::istream& operator>>(std::istream& is, Node& n);
+std::ostream& operator<<(std::ostream& os, const Node& n);
 
 } } // namespace eclipse::bvh

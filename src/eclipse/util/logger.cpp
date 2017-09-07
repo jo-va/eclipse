@@ -8,9 +8,7 @@
 #include <ctime>
 #include <iomanip>
 
-namespace eclipse { namespace logging {
-
-Logger<ConsolePolicy> instance;
+namespace eclipse {
 
 namespace details {
 
@@ -21,13 +19,13 @@ std::string format_message(const LogMessage& msg)
 #ifdef LOG_COLOR
     oss << "\033[";
     switch (msg.level) {
-    case Debug:
+    case DEBUG:
         oss << "1;32m"; break;
-    case Information:
+    case INFO:
         oss << "1;34m"; break;
-    case Warning:
+    case WARNING:
         oss << "1;33m"; break;
-    case Error:
+    case ERROR:
         oss << "1;31m"; break;
     }
 #endif
@@ -38,16 +36,19 @@ std::string format_message(const LogMessage& msg)
     auto millis = duration_cast<milliseconds>(msg.timepoint.time_since_epoch());
     uint64_t millis_remainder = millis.count() % 1000;
 
-    oss << std::put_time(std::localtime(&t), "[%y/%m/%d %H:%M:%S.")
+    oss << std::put_time(std::localtime(&t), "[%H:%M:%S.")
         << std::setfill('0') << std::setw(3) << millis_remainder << "] ";
 #endif
 
-    const char* levels[] = { "DEBUG", "INFO", "WARNING", "ERROR" };
-    oss << '[' << levels[(int)msg.level % 4] << "] " << msg.num << ". ";
+    const char* levels[] = { "DEBUG", "INFO", "WARN", "ERROR" };
+    oss << '[' << levels[(int)msg.level % 4] << "] " << std::setw(3) << msg.num << ". ";
 
 #ifdef LOG_COLOR
     oss << "\033[0m";
 #endif
+
+    if (!msg.name.empty())
+        oss << "[" << msg.name << "] ";
 
     oss << msg.message;
 
@@ -56,4 +57,4 @@ std::string format_message(const LogMessage& msg)
 
 } // namespace details
 
-} } // namespace eclipse::logging
+} // namespace eclipse

@@ -23,7 +23,7 @@ public:
 
     enum Format
     {
-        LUMINANCE8,
+        LUMINANCE8 = 0,
         LUMINANCE32F,
         RGBA8,
         RGBA32F

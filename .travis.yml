@@ -17,8 +17,7 @@ addons:
       - xorg-dev
       - libglu1-mesa-dev
       - libcurl3-dev
-      - libtiff5-dev
-      - libboost-dev
+      - libopenimageio-dev
 script:
   - export CC=/usr/bin/gcc-6
   - export CXX=/usr/bin/g++-6
@@ -30,15 +29,5 @@ install:
   - mkdir TRAVIS_TMP && cd TRAVIS_TMP
   - git clone https://github.com/glfw/glfw.git && cd glfw
   - cmake -DBUILD_SHARED_LIBS=ON -DGLFW_BUILD_EXAMPLES=OFF -DGLFW_BUILD_TESTS=OFF -DGLFW_BUILD_DOCS=OFF
-  - make && sudo make install
-  - cd ..
-   # Build OpenEXR
-  - git clone https://github.com/openexr/openexr && cd openexr
-  - cd IlmBase && cmake . && make && sudo make install
-  - cd ..
-  - cd OpenEXR && cmake . && make && sudo make install
-  - cd ..
-   # Build OpenImageIO
-  - git clone https://github.com/OpenImageIO/oiio.git && cd oiio
   - make && sudo make install
   - cd ../..

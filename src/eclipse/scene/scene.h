@@ -10,6 +10,8 @@
 
 #include <cstdint>
 #include <vector>
+#include <istream>
+#include <ostream>
 
 namespace eclipse { namespace scene {
 
@@ -23,7 +25,7 @@ struct MeshInstance
 
 struct TextureMetadata
 {
-    Texture::Format format;
+    uint32_t format;
     uint32_t width;
     uint32_t height;
     uint32_t offset;
@@ -68,5 +70,8 @@ struct Scene
 
     Camera camera;
 };
+
+std::istream& operator>>(std::istream& is, Scene& s);
+std::ostream& operator<<(std::ostream& os, const Scene& s);
 
 } } // namespace eclipse::scene

@@ -4,10 +4,12 @@
 #include "eclipse/math/math.h"
 
 #include <string>
+#include <istream>
+#include <ostream>
 
 namespace eclipse {
 
-class __packed Vec3
+class Vec3
 {
 public:
     inline Vec3(float x = 0.0f, float y = 0.0f, float z = 0.0f)
@@ -105,5 +107,8 @@ inline float max_component(const Vec3& v)
 }
 
 std::string to_string(const Vec3& v);
+
+std::istream& operator>>(std::istream& is, Vec3& v);
+std::ostream& operator<<(std::ostream& os, const Vec3& v);
 
 } // namespace eclipse

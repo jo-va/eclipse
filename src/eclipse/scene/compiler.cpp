@@ -24,6 +24,8 @@ namespace eclipse { namespace scene {
 
 namespace {
 
+auto logger = Logger::create("compiler");
+
 void create_layered_material_tree();
 int32_t generate_material(raw::MaterialPtr material);
 int32_t generate_material_tree(raw::MaterialPtr material, material::ExprNodePtr expr_node);
@@ -53,7 +55,7 @@ std::unique_ptr<Scene> compile(std::shared_ptr<raw::Scene> raw_scene)
 {
     StopWatch stop_watch;
     stop_watch.start();
-    LOG_INFO("Compiling scene");
+    logger.log<INFO>("compiling scene");
 
     g_raw_scene = raw_scene;
     g_scene = std::make_unique<Scene>();
@@ -67,7 +69,7 @@ std::unique_ptr<Scene> compile(std::shared_ptr<raw::Scene> raw_scene)
     setup_camera();
 
     stop_watch.stop();
-    LOG_INFO("Compiled scene in ", stop_watch.get_elapsed_time_ms(), " ms");
+    logger.log<INFO>("compiled scene in ", stop_watch.get_elapsed_time_ms(), " ms");
 
     return std::move(g_scene);
 }
@@ -96,10 +98,10 @@ void partition_geometry()
 {
     StopWatch stop_watch;
     stop_watch.start();
-    LOG_INFO("Partitioning geometry");
+    logger.log<INFO>("partitioning geometry");
 
     // Partition mesh instances so that each instance ends up in its own BVH leaf.
-    LOG_INFO("Building scene BVH tree (", g_raw_scene->meshes.size(), " meshes, ",
+    logger.log<INFO>("building scene BVH tree (", g_raw_scene->meshes.size(), " meshes, ",
              g_raw_scene->mesh_instances.size(), " mesh instances)");
 
     auto inst_leaf_cb = [&](bvh::Node* leaf, const std::vector<raw::MeshInstancePtr>& instances)
@@ -144,7 +146,7 @@ void partition_geometry()
     {
         auto& mesh = g_raw_scene->meshes[mesh_index];
 
-        LOG_INFO("Building BVH tree for ", mesh->name, " (", mesh->triangles.size(), " triangles)");
+        logger.log<INFO>("building BVH tree for ", mesh->name, " (", mesh->triangles.size(), " triangles)");
 
         auto tri_leaf_cb = [&](bvh::Node* leaf, const std::vector<raw::Triangle>& triangles)
         {
@@ -217,7 +219,7 @@ void partition_geometry()
         mesh_inst->transform = raw_mesh_inst->transform.inv;
     }
 
-    LOG_INFO("Creating emissive primitive copies for mesh instances");
+    logger.log<INFO>("creating emissive primitive copies for mesh instances");
 
     // For each unique emissive primitive for the scene's meshes we need to
     // create a clone for each one of the mesh instances and fill in the
@@ -248,13 +250,13 @@ void partition_geometry()
     }
 
     if (g_scene->emissive_primitives.size() > 0)
-        LOG_INFO("Emitted ", g_scene->emissive_primitives.size(), " emissive primitives ",
+        logger.log<INFO>("emitted ", g_scene->emissive_primitives.size(), " emissive primitives ",
                  "for all mesh instances (", mesh_emissive_primitives.size(), " unique mesh emissives)");
     else
-        LOG_WARNING("The scene contains no emissive primitives or a global environment light; output will appear black!");
+        logger.log<WARNING>("the scene contains no emissive primitives or a global environment light; output will appear black!");
 
     stop_watch.stop();
-    LOG_INFO("Partioned geometry in ", stop_watch.get_elapsed_time_ms(), " ms");
+    logger.log<INFO>("partioned geometry in ", stop_watch.get_elapsed_time_ms(), " ms");
 }
 
 void setup_camera()
@@ -297,7 +299,7 @@ void create_layered_material_tree()
 {
     StopWatch stop_watch;
     stop_watch.start();
-    LOG_INFO("Processing ", g_raw_scene->materials.size(), " materials");
+    logger.log<INFO>("processing ", g_raw_scene->materials.size(), " materials");
 
     g_mat_index_to_mat_root.clear();
     g_texture_index_cache.clear();
@@ -315,7 +317,7 @@ void create_layered_material_tree()
 
         g_mat_ref_list.clear();
 
-        LOG_INFO("Processing material ", mat->name);
+        logger.log<INFO>("processing material ", mat->name);
 
         try
         {
@@ -323,19 +325,19 @@ void create_layered_material_tree()
         }
         catch (ResourceError& e)
         {
-            LOG_ERROR("Resource error when processing material `", mat->name, "`: ", e.what());
+            logger.log<ERROR>("resource error when processing material `", mat->name, "`: ", e.what());
         }
         catch (material::ParseError& e)
         {
-            LOG_ERROR("Expression parsing error for material `", mat->name, "`: ", e.what());
+            logger.log<ERROR>("expression parsing error for material `", mat->name, "`: ", e.what());
         }
         catch (material::ValidationError& e)
         {
-            LOG_ERROR("Expression validation error for material `", mat->name, "`: ", e.what());
+            logger.log<ERROR>("expression validation error for material `", mat->name, "`: ", e.what());
         }
         catch (Error& e)
         {
-            LOG_ERROR("Error when processing material `", mat->name, "`: ", e.what());
+            logger.log<ERROR>("error when processing material `", mat->name, "`: ", e.what());
         }
 
         g_emissive_index_cache[mat_index] = find_material_node_by_bxdf(uint32_t(g_mat_index_to_mat_root[mat_index]), material::BXDF_EMISSIVE);
@@ -348,7 +350,7 @@ void create_layered_material_tree()
     }
 
     stop_watch.stop();
-    LOG_INFO("Processsed ", g_raw_scene->materials.size(), " materials in ", stop_watch.get_elapsed_time_ms(), " ms");
+    logger.log<INFO>("processsed ", g_raw_scene->materials.size(), " materials in ", stop_watch.get_elapsed_time_ms(), " ms");
 }
 
 // Compile material expression and generate a layered material tree from it.
@@ -466,7 +468,7 @@ int32_t generate_material_tree(raw::MaterialPtr material, material::ExprNodePtr 
                         try {
                             node.set_float(param.type, material::get_known_ior(param.value.name));
                         } catch (Error& e) {
-                            throw Error("Invalid intIOR reference for material " + material->name);
+                            throw Error("invalid intIOR reference for material " + material->name);
                         }
                     }
                     break; }
@@ -539,7 +541,7 @@ int32_t bake_texture(raw::MaterialPtr material, const std::string& tex_name)
     }
     catch (ResourceError& e)
     {
-        LOG_WARNING(material->name, ": skipping missing texture ", tex_name);
+        logger.log<WARNING>(material->name, ": skipping missing texture ", tex_name);
         return -1;
     }
 
@@ -547,11 +549,11 @@ int32_t bake_texture(raw::MaterialPtr material, const std::string& tex_name)
     auto cache_iter = g_texture_index_cache.find(res->get_path());
     if (cache_iter != g_texture_index_cache.end())
     {
-        LOG_INFO(material->name, ": reusing already loaded texture ", res->get_path());
+        logger.log<INFO>(material->name, ": reusing already loaded texture ", res->get_path());
         return cache_iter->second;
     }
 
-    LOG_INFO(material->name, ": processing texture ", res->get_path());
+    logger.log<INFO>(material->name, ": processing texture ", res->get_path());
 
     std::shared_ptr<Texture> texture;
     try

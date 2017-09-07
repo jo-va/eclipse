@@ -6,7 +6,7 @@
 
 namespace eclipse {
 
-class __packed Quaternion
+class Quaternion
 {
 public:
     inline Quaternion() : v(0.0f), w(1.0f) { }

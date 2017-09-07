@@ -4,81 +4,72 @@
 #include "eclipse/util/log_message.h"
 
 #include <string>
-#include <cstdio>
+#include <memory>
+#include <iostream>
 
-namespace eclipse { namespace logging {
+namespace eclipse {
 
 namespace details
 {
     std::string format_message(const LogMessage& msg);
 }
 
-struct ConsolePolicy
+class LogPolicy
 {
-    void open(const std::string& name)
-    {
-        (void)name;
-    }
-
-    void write(const LogMessage& message)
-    {
-        std::string fmt_msg = details::format_message(message);
-        fprintf(stdout, "%s\n", fmt_msg.c_str());
-        fflush(stdout);
-    }
-
-    void close() { }
+public:
+    virtual void open() = 0;
+    virtual void close() = 0;
+    virtual void write(const std::string& msg) = 0;
 };
 
-template <typename LogPolicy>
+struct ConsoleLogPolicy : public LogPolicy
+{
+    void open() override { }
+    void close() override { }
+
+    void write(const std::string& msg) override
+    {
+        std::cout << msg << "\n" << std::flush;
+    }
+};
+
 class Logger
 {
-    public:
-        Logger(const std::string& name = "")
-        {
-            _policy.open(name);
-        }
+public:
+    ~Logger()
+    {
+        m_policy->close();
+    }
 
-        ~Logger()
+    template <LogLevel level, typename... Args>
+    void log(Args const&... args)
+    {
+        if (level >= m_level)
         {
-            _policy.close();
+            LogMessage msg = LogMessage::make<level>(m_name, args...);
+            std::string fmt_msg = details::format_message(msg);
+            m_policy->write(fmt_msg);
         }
+    }
 
-        template <Level level, typename... Args>
-        void post(Args const&... args)
-        {
-            LogMessage msg = LogMessage::make<level>(args...);
-            _policy.write(msg);
-        }
+    static Logger create(const std::string& name, std::shared_ptr<LogPolicy> policy = nullptr)
+    {
+        if (policy == nullptr)
+            policy = std::make_shared<ConsoleLogPolicy>();
+        return Logger(name, policy);
+    }
 
-    private:
-        LogPolicy _policy;
+private:
+    Logger(const std::string& name, std::shared_ptr<LogPolicy> policy)
+        : m_name(name), m_policy(policy)
+    {
+        m_policy->open();
+    }
+
+private:
+    LogLevel m_level;
+    std::string m_name;
+    std::shared_ptr<LogPolicy> m_policy;
 };
 
-#ifdef ENABLE_LOG_DEBUG
-    #define LOG_DEBUG eclipse::logging::instance.post<eclipse::logging::Debug>
-#else
-    #define LOG_DEBUG(...)
-#endif
-
-#ifdef ENABLE_LOG_INFO
-    #define LOG_INFO eclipse::logging::instance.post<eclipse::logging::Information>
-#else
-    #define LOG_INFO(...)
-#endif
-
-#ifdef ENABLE_LOG_WARNING
-    #define LOG_WARNING eclipse::logging::instance.post<eclipse::logging::Warning>
-#else
-    #define LOG_WARNING(...)
-#endif
-
-#ifdef ENABLE_LOG_ERROR
-    #define LOG_ERROR eclipse::logging::instance.post<eclipse::logging::Error>
-#else
-    #define LOG_ERROR(...)
-#endif
-
-extern Logger<ConsolePolicy> instance;
-
-} } // namespace eclipse::logging
+} // namespace eclipse

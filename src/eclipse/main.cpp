@@ -3,8 +3,8 @@
 #include "eclipse/util/stop_watch.h"
 #include "eclipse/util/logger.h"
 #include "eclipse/util/resource.h"
-#include "eclipse/scene/obj_loader.h"
-#include "eclipse/scene/compiler.h"
+#include "eclipse/scene/scene.h"
+#include "eclipse/scene/scene_io.h"
 
 #include <iostream>
 #include <sstream>
@@ -17,24 +17,20 @@ using namespace eclipse;
 namespace {
     const uint32_t g_width = 640;
     const uint32_t g_height = 512;
+    auto logger = Logger::create("main");
 }
 
 int main(int argc, char* argv[])
 {
+    logger.log<INFO>("hello");
+
     if (argc > 1)
     {
         std::shared_ptr<Resource> r = std::make_shared<Resource>(argv[1]);
-        std::shared_ptr<raw::Scene> s = scene::load_obj(r);
-        std::shared_ptr<scene::Scene> s2 = scene::compile(s);
-    }
-    if (argc > 2)
-    {
-        std::shared_ptr<Resource> r = std::make_shared<Resource>(argv[2]);
-        std::shared_ptr<raw::Scene> s = scene::load_obj(r);
-        std::shared_ptr<scene::Scene> s2 = scene::compile(s);
+        std::shared_ptr<scene::Scene> s = scene::read(r);
     }
 
-    Window window(g_width, g_height, "Pathtracer");
+    Window window(g_width, g_height, "Eclipse renderer");
 
     bool pause = false;
     window.set_key_handler([&](int key, int scancode, int action, int mods) {
@@ -46,7 +42,7 @@ int main(int argc, char* argv[])
 
     if (!window.init())
     {
-        std::cerr << "Can't initialize window" << std::endl;
+        std::cerr << "can't initialize window" << std::endl;
         exit(EXIT_FAILURE);
     }
 

@@ -2,13 +2,6 @@
 
 namespace eclipse {
 
-//#ifdef DEBUG
-#define ENABLE_LOG_DEBUG
-//#endif
-#define ENABLE_LOG_INFO
-#define ENABLE_LOG_WARNING
-#define ENABLE_LOG_ERROR
-
 #define LOG_TIMESTAMP
 #define LOG_COLOR
 

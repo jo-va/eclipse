@@ -4,6 +4,9 @@
 #include "eclipse/math/math.h"
 #include "eclipse/math/vec3.h"
 
+#include <istream>
+#include <ostream>
+
 namespace eclipse {
 
 class BBox
@@ -55,5 +58,8 @@ inline BBox merge(const BBox& b1, const BBox& b2)
 {
     return BBox(min(b1.pmin, b2.pmin), max(b1.pmax, b2.pmax));
 }
+
+std::istream& operator>>(std::istream& is, BBox& bbox);
+std::ostream& operator<<(std::ostream& os, const BBox& bbox);
 
 } // namespace eclipse

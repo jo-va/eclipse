@@ -4,22 +4,23 @@
 #include <sstream>
 #include <chrono>
 
-namespace eclipse { namespace logging {
+namespace eclipse {
 
-enum Level
+enum LogLevel
 {
-    Debug,
-    Information,
-    Warning,
-    Error
+    DEBUG,
+    INFO,
+    WARNING,
+    ERROR
 };
 
 struct LogMessage
 {
-    template <Level msg_level, typename... Args>
-    static LogMessage make(Args const&... args)
+    template <LogLevel msg_level, typename... Args>
+    static LogMessage make(const std::string& name, Args const&... args)
     {
         LogMessage msg;
+        msg.name = name;
         msg.level = msg_level;
         msg.timepoint  = std::chrono::high_resolution_clock::now();
 
@@ -33,12 +34,13 @@ struct LogMessage
         return msg;
     }
 
+    std::string name;
     std::string message;
     std::chrono::time_point<std::chrono::high_resolution_clock> timepoint;
-    Level level;
+    LogLevel level;
     unsigned int num;
 
     static unsigned int g_num;
 };
 
-} } // namespace eclipse::logging
+} // namespace eclipse

@@ -6,10 +6,12 @@
 #include <cstring>
 #include <algorithm>
 #include <cstring>
+#include <istream>
+#include <ostream>
 
 namespace eclipse {
 
-struct __packed Mat4
+struct Mat4
 {
     float m[4][4];
 
@@ -163,5 +165,8 @@ Mat4 inverse(const Mat4& m);
 Mat4 make_perspective(float fovy, float aspect, float near, float far);
 
 Mat4 make_look_at(const Vec3& eye, const Vec3& center, const Vec3& up);
+
+std::istream& operator>>(std::istream& is, Mat4& m);
+std::ostream& operator<<(std::ostream& os, const Mat4& m);
 
 } // namespace eclipse

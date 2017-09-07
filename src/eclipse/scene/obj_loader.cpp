@@ -22,6 +22,8 @@ namespace eclipse { namespace scene {
 
 namespace {
 
+auto logger = Logger::create("obj_loader");
+
 struct Material
 {
     std::string name;
@@ -45,7 +47,7 @@ struct Material
 
     ~Material()
     {
-        //LOG_DEBUG("obj::Material ", name, " deleted");
+        //logger.log<DEBUG>("obj::Material ", name, " deleted");
     }
 };
 
@@ -103,7 +105,7 @@ std::unique_ptr<raw::Scene> load_obj(std::shared_ptr<Resource> scene)
     g_num_vertices = 0;
     g_raw_scene = std::make_unique<raw::Scene>();
 
-    LOG_INFO("Parsing scene from ", scene->get_path());
+    logger.log<INFO>("parsing scene from ", scene->get_path());
 
     StopWatch stopwatch;
     stopwatch.start();
@@ -119,9 +121,9 @@ std::unique_ptr<raw::Scene> load_obj(std::shared_ptr<Resource> scene)
         delete g_materials[i];
 
     stopwatch.stop();
-    LOG_INFO("Parsed scene in ", stopwatch.get_elapsed_time_ms(), " ms [",
-             g_raw_scene->mesh_instances.size(), " mesh instances - ",
-             g_num_vertices, " vertices - ", g_num_triangles, " triangles]");
+    logger.log<INFO>("parsed scene in ", stopwatch.get_elapsed_time_ms(), " ms [",
+                     g_raw_scene->mesh_instances.size(), " mesh instances - ",
+                     g_num_vertices, " vertices - ", g_num_triangles, " triangles]");
 
     return std::move(g_raw_scene);
 }
@@ -251,7 +253,7 @@ void process_materials()
         // Prune unused materials
         if (!obj_mat->used)
         {
-            LOG_WARNING("Skipping unused material ", obj_mat->name);
+            logger.log<WARNING>("skipping unused material ", obj_mat->name);
             auto pruned_mat = std::make_shared<raw::Material>();
             pruned_mat->name = obj_mat->name;
             pruned_mat->expression = obj_mat->get_expression();
@@ -284,7 +286,7 @@ void process_materials()
                                   pruned_materials.end());
 
     if (pruned > 0)
-        LOG_INFO("Pruned ", pruned, " unused materials");
+        logger.log<INFO>("pruned ", pruned, " unused materials");
 }
 
 // Create and select a default material for surfaces not using one
@@ -329,7 +331,7 @@ void parse(std::shared_ptr<Resource> res)
         ++line_num;
         g_line_num = line_num;
         g_file = res->get_path().c_str();
-        //LOG_DEBUG("[", line_num, "]: ", line);
+        //logger.log<DEBUG>("[", line_num, "]: ", line);
 
         // Tokenize line
         std::stringstream line_stream(line);
@@ -344,7 +346,7 @@ void parse(std::shared_ptr<Resource> res)
         if (tokens[0] == "call" || tokens[0] == "mtllib")
         {
             if (tokens.size() != 2)
-                LOG_ERROR(res->get_path(), ": ", line_num,
+                logger.log<ERROR>(res->get_path(), ": ", line_num,
                         " -> unsupported syntax for ", tokens[0],
                         "; expected 1 argument; got ", tokens.size() - 1, get_call_stack());
 
@@ -361,12 +363,12 @@ void parse(std::shared_ptr<Resource> res)
         else if (tokens[0] == "usemtl")
         {
             if (tokens.size() != 2)
-                LOG_ERROR(res->get_path(), ": ", line_num,
+                logger.log<ERROR>(res->get_path(), ": ", line_num,
                         " -> unsupported syntax for \"usemtl\" \
                         ; expected 1 argument; got ", tokens.size() - 1, get_call_stack());
 
             if (g_mat_name_to_index_map.find(tokens[1]) == g_mat_name_to_index_map.end())
-                LOG_ERROR(res->get_path(), ": ", line_num,
+                logger.log<ERROR>(res->get_path(), ": ", line_num,
                         " -> undefined material with name ", tokens[1], get_call_stack());
 
             size_t mat_index = g_mat_name_to_index_map[tokens[1]];
@@ -388,7 +390,7 @@ void parse(std::shared_ptr<Resource> res)
         else if (tokens[0] == "g" || tokens[0] == "o")
         {
             if (tokens.size() < 2)
-                LOG_ERROR(res->get_path(), ": ", line_num, " -> unsupported syntax for ", tokens[0],
+                logger.log<ERROR>(res->get_path(), ": ", line_num, " -> unsupported syntax for ", tokens[0],
                           "; expected 1 argument; got ", tokens.size() - 1);
 
             verify_last_parsed_mesh();
@@ -438,7 +440,7 @@ void verify_last_parsed_mesh()
     int last_mesh_index = g_raw_scene->meshes.size() - 1;
     if (last_mesh_index >= 0 && g_raw_scene->meshes[last_mesh_index]->triangles.size() == 0)
     {
-        LOG_WARNING("Dropping mesh ", g_raw_scene->meshes[last_mesh_index]->name, " as it contains no polygons");
+        logger.log<WARNING>("dropping mesh ", g_raw_scene->meshes[last_mesh_index]->name, " as it contains no polygons");
 
         //delete g_raw_scene->meshes[last_mesh_index];
         g_raw_scene->meshes.pop_back();
@@ -447,7 +449,7 @@ void verify_last_parsed_mesh()
 
 void parse_materials(std::shared_ptr<Resource> res)
 {
-    LOG_INFO("Parsing material library ", res->get_path());
+    logger.log<INFO>("parsing material library ", res->get_path());
 
     std::istream& input_stream = res->get_stream();
     std::vector<std::string> tokens(100);
@@ -462,7 +464,7 @@ void parse_materials(std::shared_ptr<Resource> res)
         g_line_num = line_num;
         g_file = res->get_path().c_str();
 
-        //LOG_DEBUG("[", line_num, "]: ", line);
+        //logger.log<DEBUG>("[", line_num, "]: ", line);
 
         // Tokenize line
         std::stringstream line_stream(line);
@@ -477,13 +479,13 @@ void parse_materials(std::shared_ptr<Resource> res)
         if (tokens[0] == "newmtl")
         {
             if (tokens.size() != 2)
-                LOG_ERROR(res->get_path(), ": ", line_num,
+                logger.log<ERROR>(res->get_path(), ": ", line_num,
                           " -> unsupported syntax for \"newmtl\"; \
                           expected 1 argument; got ", tokens.size() - 1, get_call_stack());
 
             mat_name = tokens[1];
             if (g_mat_name_to_index_map.find(mat_name) != g_mat_name_to_index_map.end())
-                LOG_ERROR(res->get_path(), ": ", line_num,
+                logger.log<ERROR>(res->get_path(), ": ", line_num,
                           " -> material ", mat_name, " already defined", get_call_stack());
 
             Material* material = new Material();
@@ -497,19 +499,19 @@ void parse_materials(std::shared_ptr<Resource> res)
         else
         {
             if (current_mat == nullptr)
-                LOG_ERROR(res->get_path(), ": ", line_num, " -> got ",
+                logger.log<ERROR>(res->get_path(), ": ", line_num, " -> got ",
                           tokens[0], " withoug a \"newmtl\"", get_call_stack());
 
             if (tokens[0] == "include")
             {
                 if (tokens.size() < 2)
-                    LOG_ERROR(res->get_path(), ": ", line_num,
+                    logger.log<ERROR>(res->get_path(), ": ", line_num,
                              " -> unsupported syntax for \"include\"; expected 1 argument; \
                              got ", tokens.size() - 1, get_call_stack());
 
                 auto it = g_mat_name_to_index_map.find(tokens[1]);
                 if (it == g_mat_name_to_index_map.end())
-                    LOG_ERROR();
+                    logger.log<ERROR>();
 
                 *current_mat = *g_materials[it->second];
                 current_mat->name = mat_name;
@@ -561,7 +563,7 @@ void parse_materials(std::shared_ptr<Resource> res)
             else if (tokens[0] == "mat_expr")
             {
                 if (tokens.size() < 2)
-                    LOG_ERROR(res->get_path(), ": ", line_num, " -> unsupported syntax for \
+                    logger.log<ERROR>(res->get_path(), ": ", line_num, " -> unsupported syntax for \
                             \"mat_expr\"; expected 1 argument; got ", tokens.size() - 1, get_call_stack());
 
                 for (size_t i = 1; i < tokens.size() - 1; ++i)
@@ -571,7 +573,7 @@ void parse_materials(std::shared_ptr<Resource> res)
             else if (tokens[0] == "KeScaler")
             {
                 if (tokens.size() < 2)
-                    LOG_ERROR(res->get_path(), ": ", line_num, " -> unsupported syntax for \
+                    logger.log<ERROR>(res->get_path(), ": ", line_num, " -> unsupported syntax for \
                               \"KeScaler\"; expected 1 argument; got ", tokens.size() - 1, get_call_stack());
 
                 current_mat->Ke_scaler = parse_float(tokens);
@@ -588,7 +590,7 @@ std::vector<raw::Triangle> parse_face(const std::vector<std::string>& tokens,
     std::vector<raw::Triangle> triangles;
     if (tokens.size() < 4 || tokens.size() > 5)
     {
-        LOG_ERROR(g_file, ": ", g_line_num, " -> unsupported syntax for \"f\"; expected 3 arguments \
+        logger.log<ERROR>(g_file, ": ", g_line_num, " -> unsupported syntax for \"f\"; expected 3 arguments \
                   for triangular faces or 4 arguments for a quad face; got ", tokens.size() - 1,
                   "Select the triangulation option in your exporter");
         return triangles;
@@ -632,7 +634,7 @@ std::vector<raw::Triangle> parse_face(const std::vector<std::string>& tokens,
         }
         else if (face_tokens.size() != exp_indices)
         {
-            LOG_ERROR(g_file, ": ", g_line_num, " -> expected each face argument to contain ",
+            logger.log<ERROR>(g_file, ": ", g_line_num, " -> expected each face argument to contain ",
                       exp_indices, "indices; arg ", arg, " contains ", face_tokens.size(), " indices");
             return triangles;
         }
@@ -640,7 +642,7 @@ std::vector<raw::Triangle> parse_face(const std::vector<std::string>& tokens,
         // Faces must at least define a vertex coord
         if (face_tokens[0].empty())
         {
-            LOG_ERROR(g_file, ": ", g_line_num, " -> face argument ", arg, " does not include a vertex index");
+            logger.log<ERROR>(g_file, ": ", g_line_num, " -> face argument ", arg, " does not include a vertex index");
             return triangles;
         }
 
@@ -721,7 +723,7 @@ size_t select_coord_index(const std::string& index_token, size_t coord_list_size
         offset = int(rel_offset) + index - 1;
 
     if (offset < 0 || size_t(offset) >= coord_list_size)
-        LOG_ERROR(g_file, ": ", g_line_num, " -> index out of bounds");
+        logger.log<ERROR>(g_file, ": ", g_line_num, " -> index out of bounds");
 
     return offset;
 }
@@ -730,7 +732,7 @@ std::shared_ptr<raw::MeshInstance> parse_mesh_instance(const std::vector<std::st
 {
     if (tokens.size() != 11)
     {
-        LOG_ERROR(g_file, ": ", g_line_num, " -> unsupported syntax for \"instance\";\
+        logger.log<ERROR>(g_file, ": ", g_line_num, " -> unsupported syntax for \"instance\";\
                   expected 10 arguments: mesh_name tX tY tZ yaw pitch roll scaleX scaleY scaleZ; got ", tokens.size() - 1);
         return nullptr;;
     }
@@ -749,7 +751,7 @@ std::shared_ptr<raw::MeshInstance> parse_mesh_instance(const std::vector<std::st
     }
     if (mesh_index == -1)
     {
-        LOG_ERROR(g_file, ": ", g_line_num, " -> unknown mesh with name ", mesh_name);
+        logger.log<ERROR>(g_file, ": ", g_line_num, " -> unknown mesh with name ", mesh_name);
         return nullptr;
     }
 
@@ -792,7 +794,7 @@ float parse_float(const std::vector<std::string>& tokens)
 {
     if (tokens.size() < 2)
     {
-        LOG_ERROR(g_file, ": ", g_line_num,
+        logger.log<ERROR>(g_file, ": ", g_line_num,
                   " -> unsupported syntax for ", tokens[0],
                   "; expected 1 arguments; got ", tokens.size() - 1, get_call_stack());
         return 0.0f;
@@ -805,7 +807,7 @@ Vec2 parse_vec2(const std::vector<std::string>& tokens)
 {
     if (tokens.size() < 3)
     {
-        LOG_ERROR(g_file, ": ", g_line_num,
+        logger.log<ERROR>(g_file, ": ", g_line_num,
                   " -> Unsupported syntax for ", tokens[0],
                   "; expected 2 arguments; got ", tokens.size() - 1, get_call_stack());
         return Vec2();
@@ -818,7 +820,7 @@ Vec3 parse_vec3(const std::vector<std::string>& tokens)
 {
     if (tokens.size() < 4)
     {
-        LOG_ERROR(g_file, ": ", g_line_num,
+        logger.log<ERROR>(g_file, ": ", g_line_num,
                   " -> Unsupported syntax for ", tokens[0],
                   "; expected 3 arguments; got ", tokens.size() - 1, get_call_stack());
         return Vec3();

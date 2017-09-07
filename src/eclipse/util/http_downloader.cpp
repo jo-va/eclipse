@@ -7,11 +7,17 @@
 
 namespace eclipse {
 
+namespace {
+
+auto logger = Logger::create("http_downloader");
+
+}
+
 HTTPDownloader::HTTPDownloader()
 {
     m_curl = (void*)curl_easy_init();
     if (!m_curl)
-        throw HTTPError("Can't initialize curl");
+        throw HTTPError("can't initialize curl");
 }
 
 HTTPDownloader::~HTTPDownloader()
@@ -48,11 +54,11 @@ std::string HTTPDownloader::get(const std::string& url)
     curl_easy_setopt((CURL*)m_curl, CURLOPT_WRITEFUNCTION, write_callback_string);
     curl_easy_setopt((CURL*)m_curl, CURLOPT_WRITEDATA, &read_buffer);
 
-    LOG_INFO("Downloading ", url);
+    logger.log<INFO>("downloading ", url);
 
     CURLcode res = curl_easy_perform((CURL*)m_curl);
     if (res != CURLE_OK)
-        throw HTTPError("Failed to download [" + url + "]: " + curl_easy_strerror(res));
+        throw HTTPError("failed to download [" + url + "]: " + curl_easy_strerror(res));
 
     return read_buffer;
 }
@@ -63,7 +69,7 @@ void HTTPDownloader::save_to_file(const std::string& url, const std::string& fil
     file_stream.open(filepath, std::ios::trunc | std::ios::out);
 
     if (!m_curl)
-        throw HTTPError("Can't save " + url + " to " + filepath + ": Curl is not initialized");
+        throw HTTPError("can't save " + url + " to " + filepath + ": Curl is not initialized");
 
     curl_easy_setopt((CURL*)m_curl, CURLOPT_URL, url.c_str());
     curl_easy_setopt((CURL*)m_curl, CURLOPT_SSL_VERIFYPEER, 0L);
@@ -73,11 +79,11 @@ void HTTPDownloader::save_to_file(const std::string& url, const std::string& fil
     curl_easy_setopt((CURL*)m_curl, CURLOPT_WRITEFUNCTION, write_callback_file);
     curl_easy_setopt((CURL*)m_curl, CURLOPT_WRITEDATA, &file_stream);
 
-    LOG_INFO("Downloading ", url);
+    logger.log<INFO>("downloading ", url);
 
     CURLcode res = curl_easy_perform((CURL*)m_curl);
     if (res != CURLE_OK)
-        throw HTTPError("Failed to download [" + url + "]: " + curl_easy_strerror(res));
+        throw HTTPError("failed to download [" + url + "]: " + curl_easy_strerror(res));
 
     file_stream.close();
 }

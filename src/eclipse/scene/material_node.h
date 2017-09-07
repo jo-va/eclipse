@@ -4,6 +4,8 @@
 #include "eclipse/scene/mat_expr.h"
 
 #include <cstdint>
+#include <istream>
+#include <ostream>
 
 namespace eclipse { namespace material {
 
@@ -39,5 +41,8 @@ struct Node
     int32_t get_left_child() const;
     int32_t get_right_child() const;
 } __packed;
+
+std::istream& operator>>(std::istream& is, Node& n);
+std::ostream& operator<<(std::ostream& os, const Node& n);
 
 } } // namespace eclipse::material

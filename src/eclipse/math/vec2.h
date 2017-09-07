@@ -3,9 +3,12 @@
 #include "eclipse/prerequisites.h"
 #include "eclipse/math/math.h"
 
+#include <istream>
+#include <ostream>
+
 namespace eclipse {
 
-class __packed Vec2
+class Vec2
 {
 public:
     inline Vec2(float x = 0.0f, float y = 0.0f)
@@ -53,5 +56,8 @@ inline Vec2 max(const Vec2& a, const Vec2& b)
 {
     return Vec2(max(a.x, b.x), max(a.y, b.y));
 }
+
+std::istream& operator>>(std::istream& is, Vec2& v);
+std::ostream& operator<<(std::ostream& os, const Vec2& v);
 
 } // namespace eclipse

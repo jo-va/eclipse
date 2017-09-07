@@ -4,9 +4,12 @@
 #include "eclipse/math/math.h"
 #include "eclipse/math/vec3.h"
 
+#include <istream>
+#include <ostream>
+
 namespace eclipse {
 
-class __packed Vec4
+class Vec4
 {
 public:
     inline Vec4(float x = 0.0f, float y = 0.0f, float z = 0.0f, float w = 0.0f)
@@ -29,5 +32,8 @@ public:
 
     float x, y, z, w;
 };
+
+std::istream& operator>>(std::istream& is, Vec4& v);
+std::ostream& operator<<(std::ostream& os, const Vec4& v);
 
 } // namespace eclipse

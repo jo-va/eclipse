@@ -13,6 +13,7 @@ find_package(CURL REQUIRED)
 find_package(BISON REQUIRED)
 find_package(FLEX REQUIRED)
 find_package(OpenImageIO REQUIRED)
+find_package(ZLIB REQUIRED)
 
 # Set compilation flags
 set(CMAKE_CXX_STANDARD 14)
@@ -30,6 +31,7 @@ include_directories(GLEW_INCLUDE_DIRS)
 include_directories(GLFW_INCLUDE_DIRS)
 include_directories(CURL_INCLUDE_DIRS)
 include_directories(OPENIMAGEIO_INCLUDE_DIR)
+include_directories(ZLIB_INCLUDE_DIRS)
 
 include_directories(src)
 add_subdirectory(src/eclipse)
