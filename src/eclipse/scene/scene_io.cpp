@@ -32,7 +32,7 @@ std::unique_ptr<Scene> read(std::shared_ptr<Resource> res)
         std::unique_ptr<Scene> scene = compile(raw_scene);
         return std::move(scene);
     }
-    else if (has_extension(res->get_path(), ".zip"))
+    else if (has_extension(res->get_path(), ".bin"))
     {
         std::unique_ptr<Scene> scene = read_zip(res);
         return std::move(scene);
@@ -54,6 +54,42 @@ void write(std::shared_ptr<Scene> scene, const std::string& file)
 
     create_dir(remove_filename(file));
 
+    std::ostringstream oss;
+    oss << *scene;
+
+    z_stream zs;
+    std::memset(&zs, 0, sizeof(zs));
+
+    if (deflateInit(&zs, Z_BEST_COMPRESSION) != Z_OK)
+        throw Error("write: can't initialize zlib: " + std::string(zs.msg));
+
+    zs.next_in = (Bytef*)oss.str().data();
+    zs.avail_in = oss.str().size();
+
+    int ret;
+    char out_buffer[32768];
+    std::string str_data;
+
+    do {
+        zs.next_out = reinterpret_cast<Bytef*>(out_buffer);
+        zs.avail_out = sizeof(out_buffer);
+
+        ret = deflate(&zs, Z_FINISH);
+
+        if (str_data.size() < zs.total_out)
+            str_data.append(out_buffer, zs.total_out - str_data.size());
+
+    } while (ret == Z_OK);
+
+    deflateEnd(&zs);
+
+    if (ret != Z_STREAM_END)
+        throw IOError("write: error during compression (" + std::to_string(ret) + "): " + zs.msg);
+
+    std::ofstream out_file(file);
+    out_file << str_data;
+    out_file.close();
+
     stop_watch.stop();
     logger.log<INFO>("compressed scene in ", stop_watch.get_elapsed_time_ms(), " ms");
 }
@@ -72,7 +108,7 @@ std::unique_ptr<Scene> read_zip(std::shared_ptr<Resource> res)
     std::memset(&zs, 0, sizeof(zs));
 
     if (inflateInit(&zs) != Z_OK)
-        throw Error("can't initialize zlib");
+        throw Error("read_zip: can't initialize zlib: " + std::string(zs.msg));
 
     zs.next_in = (Bytef*)data.data();
     zs.avail_in = data.size();
@@ -99,8 +135,8 @@ std::unique_ptr<Scene> read_zip(std::shared_ptr<Resource> res)
 
     // deserialize scene from decompressed data
     auto scene = std::make_unique<Scene>();
-    std::istringstream ss(str_data);
-    ss >> *scene;
+    std::istringstream iss(str_data);
+    iss >> *scene;
 
     stop_watch.stop();
     logger.log<INFO>("loaded scene in ", stop_watch.get_elapsed_time_ms(), " ms");

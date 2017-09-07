@@ -22,12 +22,18 @@ namespace {
 
 int main(int argc, char* argv[])
 {
-    logger.log<INFO>("hello");
-
-    if (argc > 1)
+    try
     {
-        std::shared_ptr<Resource> r = std::make_shared<Resource>(argv[1]);
-        std::shared_ptr<scene::Scene> s = scene::read(r);
+        if (argc > 1)
+        {
+            std::shared_ptr<Resource> r = std::make_shared<Resource>(argv[1]);
+            std::shared_ptr<scene::Scene> s = scene::read(r);
+            scene::write(s, std::string(argv[1]) + ".bin");
+        }
+    }
+    catch (std::exception& e)
+    {
+        logger.log<ERROR>("Exception caught: ", e.what());
     }
 
     Window window(g_width, g_height, "Eclipse renderer");
