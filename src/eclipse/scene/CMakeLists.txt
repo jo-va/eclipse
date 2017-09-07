@@ -30,7 +30,6 @@ set(SCENE_SOURCES scene.cpp
                   material_node.cpp
                   compiler.cpp
                   camera.cpp
-                  bvh_node.cpp
                   known_ior.cpp
                   mat_expr.cpp
                   ${CMAKE_CURRENT_BINARY_DIR}/mat_expr_parser.cxx

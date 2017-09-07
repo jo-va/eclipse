@@ -42,32 +42,4 @@ void Camera::update_frustrum()
 
 }
 
-std::istream& operator>>(std::istream& is, Camera& cam)
-{
-    is >> cam.eye;
-    is >> cam.look_at;
-    is >> cam.up;
-    is >> cam.pitch;
-    is >> cam.yaw;
-    is >> cam.fov;
-    is >> cam.view_mat;
-    is >> cam.proj_mat;
-    is >> cam.invert_y;
-    return is;
-}
-
-std::ostream& operator<<(std::ostream& os, const Camera& cam)
-{
-    os << cam.eye;
-    os << cam.look_at;
-    os << cam.up;
-    os << cam.pitch;
-    os << cam.yaw;
-    os << cam.fov;
-    os << cam.view_mat;
-    os << cam.proj_mat;
-    os << cam.invert_y;
-    return os;
-}
-
 } } // namespace eclipse::scene

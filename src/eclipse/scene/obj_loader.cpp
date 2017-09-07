@@ -173,7 +173,7 @@ std::string Material::get_expression()
             expr_args.push_back(std::string(material::Radiance) + ": " + to_string(Ke));
 
         if (Ke_scaler != 0.0f)
-            expr_args.push_back(std::string(material::Scale) + ": " + std::to_string(Ke_scaler));
+            expr_args.push_back(std::string(material::RadianceScaler) + ": " + std::to_string(Ke_scaler));
     }
     else
     {
@@ -184,9 +184,9 @@ std::string Material::get_expression()
             expr_args.push_back(std::string(material::Reflectance) + ": " + to_string(Kd));
     }
 
-    std::string joined_expr_args;
-    for (auto const& s : expr_args)
-        joined_expr_args += ", " + s;
+    std::string joined_expr_args = expr_args[0];
+    for (size_t i = 1; i < expr_args.size(); ++i)
+        joined_expr_args += ", " + expr_args[i];
 
     std::string expr = material::node_to_string(bxdf) + "(" + joined_expr_args + ")";
 
@@ -563,8 +563,8 @@ void parse_materials(std::shared_ptr<Resource> res)
             else if (tokens[0] == "mat_expr")
             {
                 if (tokens.size() < 2)
-                    logger.log<ERROR>(res->get_path(), ": ", line_num, " -> unsupported syntax for \
-                            \"mat_expr\"; expected 1 argument; got ", tokens.size() - 1, get_call_stack());
+                    logger.log<ERROR>(res->get_path(), ": ", line_num, " -> unsupported syntax for ",
+                            "\"mat_expr\"; expected 1 argument; got ", tokens.size() - 1, get_call_stack());
 
                 for (size_t i = 1; i < tokens.size() - 1; ++i)
                     current_mat->expression += tokens[i] + " ";
@@ -573,8 +573,8 @@ void parse_materials(std::shared_ptr<Resource> res)
             else if (tokens[0] == "KeScaler")
             {
                 if (tokens.size() < 2)
-                    logger.log<ERROR>(res->get_path(), ": ", line_num, " -> unsupported syntax for \
-                              \"KeScaler\"; expected 1 argument; got ", tokens.size() - 1, get_call_stack());
+                    logger.log<ERROR>(res->get_path(), ": ", line_num, " -> unsupported syntax for ",
+                              "\"KeScaler\"; expected 1 argument; got ", tokens.size() - 1, get_call_stack());
 
                 current_mat->Ke_scaler = parse_float(tokens);
             }
@@ -723,7 +723,9 @@ size_t select_coord_index(const std::string& index_token, size_t coord_list_size
         offset = int(rel_offset) + index - 1;
 
     if (offset < 0 || size_t(offset) >= coord_list_size)
+    {
         logger.log<ERROR>(g_file, ": ", g_line_num, " -> index out of bounds");
+    }
 
     return offset;
 }

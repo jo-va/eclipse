@@ -11,7 +11,7 @@ namespace scene {
 
 struct Scene;
 
-std::unique_ptr<Scene> read(std::shared_ptr<Resource> resource);
-void write(std::shared_ptr<Scene> scene, const std::string& file);
+std::unique_ptr<Scene> read(std::shared_ptr<Resource> res);
+void write(std::shared_ptr<Scene> scene, std::shared_ptr<Resource> res);
 
 } } // namespace eclipse::scene

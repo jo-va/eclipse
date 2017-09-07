@@ -20,8 +20,17 @@ bool has_extension(const std::string& file, const std::string& ext)
 
 std::string remove_filename(const std::string& uri)
 {
-    std::string base_path;
+    std::string base_path = uri;
     size_t pos = uri.find_last_of('/');
+    if (pos != std::string::npos)
+        base_path = uri.substr(0, pos);
+    return base_path;
+}
+
+std::string remove_extension(const std::string& uri)
+{
+    std::string base_path = uri;
+    size_t pos = uri.find_last_of('.');
     if (pos != std::string::npos)
         base_path = uri.substr(0, pos);
     return base_path;

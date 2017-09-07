@@ -15,6 +15,7 @@ public:
 
 bool has_extension(const std::string& file, const std::string& ext);
 std::string remove_filename(const std::string& uri);
+std::string remove_extension(const std::string& uri);
 std::string get_filename(const std::string& uri);
 std::string concat_paths(const std::string& base_uri, const std::string& rel_uri);
 

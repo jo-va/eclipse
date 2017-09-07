@@ -57,7 +57,4 @@ struct Node
     }
 };
 
-std::istream& operator>>(std::istream& is, Node& n);
-std::ostream& operator<<(std::ostream& os, const Node& n);
-
 } } // namespace eclipse::bvh

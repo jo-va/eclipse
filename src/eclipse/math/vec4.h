@@ -33,7 +33,4 @@ public:
     float x, y, z, w;
 };
 
-std::istream& operator>>(std::istream& is, Vec4& v);
-std::ostream& operator<<(std::ostream& os, const Vec4& v);
-
 } // namespace eclipse

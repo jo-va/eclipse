@@ -129,10 +129,10 @@ void partition_geometry()
     for (auto& mesh : g_raw_scene->meshes)
         total_vertices += 3 * mesh->triangles.size();
 
-    g_scene->vertices.reserve(total_vertices);
-    g_scene->normals.reserve(total_vertices);
-    g_scene->uvs.reserve(total_vertices);
-    g_scene->material_indices.reserve(total_vertices / 3);
+    g_scene->vertices.resize(total_vertices);
+    g_scene->normals.resize(total_vertices);
+    g_scene->uvs.resize(total_vertices);
+    g_scene->material_indices.resize(total_vertices / 3);
 
     // Partition each mesh into ist own BVH. Update all instances to point
     // to this mesh BVH.
@@ -207,14 +207,14 @@ void partition_geometry()
     }
 
     // Process each mesh instance
-    g_scene->mesh_instances.reserve(g_raw_scene->mesh_instances.size());
+    g_scene->mesh_instances.resize(g_raw_scene->mesh_instances.size());
     for (size_t i = 0; i < g_raw_scene->mesh_instances.size(); ++i)
     {
         raw::MeshInstancePtr raw_mesh_inst = g_raw_scene->mesh_instances[i];
+
         MeshInstance* mesh_inst = &g_scene->mesh_instances[i];
         mesh_inst->mesh_index = raw_mesh_inst->mesh_index;
         mesh_inst->bvh_root = mesh_bvh_roots[raw_mesh_inst->mesh_index];
-
         // We need to invert the transformation matrix when performing ray traversal
         mesh_inst->transform = raw_mesh_inst->transform.inv;
     }

@@ -3,6 +3,7 @@
 #include "eclipse/util/stop_watch.h"
 #include "eclipse/util/logger.h"
 #include "eclipse/util/resource.h"
+#include "eclipse/util/file_util.h"
 #include "eclipse/scene/scene.h"
 #include "eclipse/scene/scene_io.h"
 
@@ -27,8 +28,9 @@ int main(int argc, char* argv[])
         if (argc > 1)
         {
             std::shared_ptr<Resource> r = std::make_shared<Resource>(argv[1]);
-            std::shared_ptr<scene::Scene> s = scene::read(r);
-            scene::write(s, std::string(argv[1]) + ".bin");
+            std::shared_ptr<scene::Scene> s1 = scene::read(r);
+            if (has_extension(r->get_path(), ".obj"))
+                scene::write(s1, r);
         }
     }
     catch (std::exception& e)

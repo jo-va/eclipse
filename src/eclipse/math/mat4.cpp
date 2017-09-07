@@ -119,20 +119,4 @@ Mat4 make_look_at(const Vec3& eye, const Vec3& center, const Vec3& up)
     return rot * trans;
 }
 
-std::istream& operator>>(std::istream& is, Mat4& m)
-{
-    for (size_t i = 0; i < 4; ++i)
-        for (size_t j = 0; j < 4; ++j)
-            is >> m.m[i][j];
-    return is;
-}
-
-std::ostream& operator<<(std::ostream& os, const Mat4& m)
-{
-    for (size_t i = 0; i < 4; ++i)
-        for (size_t j = 0; j < 4; ++j)
-            os << m.m[i][j];
-    return os;
-}
-
 } // namespace foundation

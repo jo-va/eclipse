@@ -27,7 +27,4 @@ struct Camera
     void make_projection(float aspect);
 };
 
-std::istream& operator>>(std::istream& is, Camera& cam);
-std::ostream& operator<<(std::ostream& os, const Camera& cam);
-
 } } // namespace eclipse::scene

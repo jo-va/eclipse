@@ -69,9 +69,9 @@ struct Scene
     int32_t scene_emissive_mat_index;
 
     Camera camera;
-};
 
-std::istream& operator>>(std::istream& is, Scene& s);
-std::ostream& operator<<(std::ostream& os, const Scene& s);
+    void serialize(std::ostream& os);
+    void deserialize(std::istream& is);
+};
 
 } } // namespace eclipse::scene

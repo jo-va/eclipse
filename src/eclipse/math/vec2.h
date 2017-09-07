@@ -57,7 +57,4 @@ inline Vec2 max(const Vec2& a, const Vec2& b)
     return Vec2(max(a.x, b.x), max(a.y, b.y));
 }
 
-std::istream& operator>>(std::istream& is, Vec2& v);
-std::ostream& operator<<(std::ostream& os, const Vec2& v);
-
 } // namespace eclipse

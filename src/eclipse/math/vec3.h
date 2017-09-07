@@ -108,7 +108,4 @@ inline float max_component(const Vec3& v)
 
 std::string to_string(const Vec3& v);
 
-std::istream& operator>>(std::istream& is, Vec3& v);
-std::ostream& operator<<(std::ostream& os, const Vec3& v);
-
 } // namespace eclipse

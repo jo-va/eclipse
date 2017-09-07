@@ -43,19 +43,20 @@ std::unique_ptr<Scene> read(std::shared_ptr<Resource> res)
     }
 }
 
-void write(std::shared_ptr<Scene> scene, const std::string& file)
+void write(std::shared_ptr<Scene> scene, std::shared_ptr<Resource> res)
 {
+    std::string filename = remove_extension(res->get_path()) + ".bin";
     StopWatch stop_watch;
     stop_watch.start();
-    logger.log<INFO>("compressing scene to " + file);
+    logger.log<INFO>("compressing scene to " + filename);
 
     if (!scene)
         logger.log<WARNING>("write: empty scene");
 
-    create_dir(remove_filename(file));
+    create_dir(remove_filename(filename));
 
     std::ostringstream oss;
-    oss << *scene;
+    scene->serialize(oss);
 
     z_stream zs;
     std::memset(&zs, 0, sizeof(zs));
@@ -86,7 +87,7 @@ void write(std::shared_ptr<Scene> scene, const std::string& file)
     if (ret != Z_STREAM_END)
         throw IOError("write: error during compression (" + std::to_string(ret) + "): " + zs.msg);
 
-    std::ofstream out_file(file);
+    std::ofstream out_file(filename);
     out_file << str_data;
     out_file.close();
 
@@ -136,7 +137,7 @@ std::unique_ptr<Scene> read_zip(std::shared_ptr<Resource> res)
     // deserialize scene from decompressed data
     auto scene = std::make_unique<Scene>();
     std::istringstream iss(str_data);
-    iss >> *scene;
+    scene->deserialize(iss);
 
     stop_watch.stop();
     logger.log<INFO>("loaded scene in ", stop_watch.get_elapsed_time_ms(), " ms");

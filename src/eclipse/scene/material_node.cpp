@@ -130,18 +130,4 @@ int32_t Node::get_right_child() const
     return *alias_cast<int32_t*>(data + 2);
 }
 
-std::istream& operator>>(std::istream& is, Node& n)
-{
-    for (size_t i = 0; i < sizeof(n.data) / sizeof(n.data[0]); ++i)
-        is >> n.data[i];
-    return is;
-}
-
-std::ostream& operator<<(std::ostream& os, const Node& n)
-{
-    for (size_t i = 0; i < sizeof(n.data) / sizeof(n.data[0]); ++i)
-        os << n.data[i];
-    return os;
-}
-
 } } // namespace eclipse::material
