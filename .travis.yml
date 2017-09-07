@@ -17,6 +17,9 @@ addons:
       - xorg-dev
       - libglu1-mesa-dev
       - libcurl3-dev
+      - libopenexr-dev
+      - libtiff5-dev
+      - libboost-dev
 script:
   - export CC=/usr/bin/gcc-6
   - export CXX=/usr/bin/g++-6
