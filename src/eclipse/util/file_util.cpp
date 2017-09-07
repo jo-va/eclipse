@@ -113,7 +113,7 @@ std::vector<char> read_file(const std::string& file)
 {
     std::ifstream file_stream(file, std::ios::binary);
     std::vector<char> data((std::istreambuf_iterator<char>(file_stream)),
-                              std::istreambuf_iterator<char>());
+                            std::istreambuf_iterator<char>());
 
     return std::move(data);
 }

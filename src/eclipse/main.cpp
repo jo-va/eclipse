@@ -31,6 +31,7 @@ int main(int argc, char* argv[])
             std::shared_ptr<scene::Scene> s1 = scene::read(r);
             if (has_extension(r->get_path(), ".obj"))
                 scene::write(s1, r);
+            logger.log<INFO>("Scene contains ", s1->vertices.size(), " vertices");
         }
     }
     catch (std::exception& e)

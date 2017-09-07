@@ -58,37 +58,16 @@ void write(std::shared_ptr<Scene> scene, std::shared_ptr<Resource> res)
     std::ostringstream oss;
     scene->serialize(oss);
 
-    z_stream zs;
-    std::memset(&zs, 0, sizeof(zs));
+    size_t ucomp_size = oss.str().size();
+    size_t comp_size = compressBound(ucomp_size);
 
-    if (deflateInit(&zs, Z_BEST_COMPRESSION) != Z_OK)
-        throw Error("write: can't initialize zlib: " + std::string(zs.msg));
-
-    zs.next_in = (Bytef*)oss.str().data();
-    zs.avail_in = oss.str().size();
-
-    int ret;
-    char out_buffer[32768];
-    std::string str_data;
-
-    do {
-        zs.next_out = reinterpret_cast<Bytef*>(out_buffer);
-        zs.avail_out = sizeof(out_buffer);
-
-        ret = deflate(&zs, Z_FINISH);
-
-        if (str_data.size() < zs.total_out)
-            str_data.append(out_buffer, zs.total_out - str_data.size());
-
-    } while (ret == Z_OK);
-
-    deflateEnd(&zs);
-
-    if (ret != Z_STREAM_END)
-        throw IOError("write: error during compression (" + std::to_string(ret) + "): " + zs.msg);
+    std::vector<char> buffer(comp_size);
+    compress((Bytef*)&buffer[0], &comp_size, (Bytef*)oss.str().c_str(), ucomp_size);
+    buffer.resize(comp_size);
 
     std::ofstream out_file(filename);
-    out_file << str_data;
+    out_file.write((char*)&ucomp_size, sizeof(ucomp_size));
+    out_file.write((char*)&buffer[0], buffer.size());
     out_file.close();
 
     stop_watch.stop();
@@ -101,42 +80,25 @@ std::unique_ptr<Scene> read_zip(std::shared_ptr<Resource> res)
     stop_watch.start();
     logger.log<INFO>("parsing compiled scene from ", res->get_path());
 
-    auto data = read_file(res->get_path());
-    if (data.empty())
-        throw IOError("read_zip: cant't open zip file " + res->get_path());
+    std::ifstream in_file(res->get_path());
+    in_file.seekg(0, std::ios::end);
+    uLong size = in_file.tellg();
+    in_file.seekg(0, std::ios::beg);
 
-    z_stream zs;
-    std::memset(&zs, 0, sizeof(zs));
+    size_t ucomp_size;
+    in_file.read((char*)&ucomp_size, sizeof(ucomp_size));
 
-    if (inflateInit(&zs) != Z_OK)
-        throw Error("read_zip: can't initialize zlib: " + std::string(zs.msg));
+    size_t data_size = size - sizeof(ucomp_size);
+    std::vector<char> data(data_size);
+    in_file.read(&data[0], data_size);
 
-    zs.next_in = (Bytef*)data.data();
-    zs.avail_in = data.size();
-
-    int ret;
-    char out_buffer[32768];
-    std::string str_data;
-
-    do {
-        zs.next_out = reinterpret_cast<Bytef*>(out_buffer);
-        zs.avail_out = sizeof(out_buffer);
-
-        ret = inflate(&zs, 0);
-
-        if (str_data.size() < zs.total_out)
-            str_data.append(out_buffer, zs.total_out - str_data.size());
-
-    } while (ret == Z_OK);
-
-    inflateEnd(&zs);
-
-    if (ret != Z_STREAM_END)
-        throw IOError("read_zip: error during decompression (" + std::to_string(ret) + "): " + zs.msg);
+    std::string buffer;
+    buffer.resize(ucomp_size);
+    uncompress((Bytef*)buffer.data(), &ucomp_size, (Bytef*)&data[0], data.size());
 
     // deserialize scene from decompressed data
     auto scene = std::make_unique<Scene>();
-    std::istringstream iss(str_data);
+    std::istringstream iss(buffer);
     scene->deserialize(iss);
 
     stop_watch.stop();
