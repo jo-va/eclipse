@@ -8,6 +8,7 @@
 #include "eclipse/math/mat4.h"
 #include "eclipse/util/texture.h"
 
+#include <string>
 #include <cstdint>
 #include <vector>
 #include <istream>
@@ -70,8 +71,10 @@ struct Scene
 
     Camera camera;
 
-    void serialize(std::ostream& os);
+    void serialize(std::ostream& os) const;
     void deserialize(std::istream& is);
+
+    std::string get_stats() const;
 };
 
 } } // namespace eclipse::scene
