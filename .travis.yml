@@ -17,7 +17,6 @@ addons:
       - xorg-dev
       - libglu1-mesa-dev
       - libcurl3-dev
-      - libopenimageio-dev
 script:
   - export CC=/usr/bin/gcc-6
   - export CXX=/usr/bin/g++-6
@@ -30,4 +29,8 @@ install:
   - git clone https://github.com/glfw/glfw.git && cd glfw
   - cmake -DBUILD_SHARED_LIBS=ON -DGLFW_BUILD_EXAMPLES=OFF -DGLFW_BUILD_TESTS=OFF -DGLFW_BUILD_DOCS=OFF
   - make && sudo make install
+  - cd ..
+   # Build OpenImageIO
+  - git clone https://github.com/OpenImageIO/oiio.git && cd oiio
+  - make && make install
   - cd ../..
