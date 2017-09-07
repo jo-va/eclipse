@@ -6,7 +6,9 @@
 #include <memory>
 #include <cstdint>
 
-namespace eclipse { namespace scene {
+namespace eclipse {
+
+namespace scene {
 
 constexpr char SceneDiffuseMaterialName[] = "scene_diffuse_material";
 constexpr char SceneEmissiveMaterialName[] = "scene_emissive_material";

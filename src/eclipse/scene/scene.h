@@ -2,6 +2,7 @@
 
 #include "eclipse/scene/bvh_node.h"
 #include "eclipse/scene/material_node.h"
+#include "eclipse/scene/camera.h"
 #include "eclipse/math/vec2.h"
 #include "eclipse/math/vec4.h"
 #include "eclipse/math/mat4.h"
@@ -10,7 +11,7 @@
 #include <cstdint>
 #include <vector>
 
-namespace eclipse {
+namespace eclipse { namespace scene {
 
 struct MeshInstance
 {
@@ -64,6 +65,8 @@ struct Scene
     // properties such as diffuse and emissive colors
     int32_t scene_diffuse_mat_index;
     int32_t scene_emissive_mat_index;
+
+    Camera camera;
 };
 
-} // namespace eclipse
+} } // namespace eclipse::scene

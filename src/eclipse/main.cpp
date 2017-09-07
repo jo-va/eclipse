@@ -25,13 +25,13 @@ int main(int argc, char* argv[])
     {
         std::shared_ptr<Resource> r = std::make_shared<Resource>(argv[1]);
         std::shared_ptr<raw::Scene> s = scene::load_obj(r);
-        std::shared_ptr<Scene> s2 = scene::compile(s);
+        std::shared_ptr<scene::Scene> s2 = scene::compile(s);
     }
     if (argc > 2)
     {
         std::shared_ptr<Resource> r = std::make_shared<Resource>(argv[2]);
         std::shared_ptr<raw::Scene> s = scene::load_obj(r);
-        std::shared_ptr<Scene> s2 = scene::compile(s);
+        std::shared_ptr<scene::Scene> s2 = scene::compile(s);
     }
 
     Window window(g_width, g_height, "Pathtracer");

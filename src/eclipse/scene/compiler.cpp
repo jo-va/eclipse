@@ -259,7 +259,11 @@ void partition_geometry()
 
 void setup_camera()
 {
-    // TODO:
+    g_scene->camera.fov = g_raw_scene->camera.fov;
+    g_scene->camera.eye = g_raw_scene->camera.eye;
+    g_scene->camera.look_at = g_raw_scene->camera.look_at;
+    g_scene->camera.up = g_raw_scene->camera.up;
+    g_scene->camera.update();
 }
 
 // Performs a DFS in a layered material tree trying to locate a node with a particular BXDF.
@@ -435,9 +439,6 @@ int32_t generate_material_tree(raw::MaterialPtr material, material::ExprNodePtr 
 
         for (auto& param : bxdf_node->parameters)
         {
-            //LOG_INFO("bxdf param: ", material::param_to_string(param.type), " - ",
-            //         param.value.vec[0], " ", param.value.vec[1], " ", param.value.vec[2], " ", param.value.name);
-
             switch (param.type)
             {
                 case material::REFLECTANCE:

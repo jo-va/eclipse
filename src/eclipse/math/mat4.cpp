@@ -87,4 +87,34 @@ Mat4 inverse(const Mat4& m)
     return result;
 }
 
+Mat4 make_perspective(float fovy, float aspect, float near, float far)
+{
+    float den = near - far;
+    float f = (float)(1.0 / (double)tan(double(fovy) / 2.0));
+
+    return Mat4(f / aspect, 0, 0,                        0,
+                0,          f, 0,                        0,
+                0,          0, (near + far) / den,      -1,
+                0,          0, (2.0 * far * near) / den, 0);
+}
+
+Mat4 make_look_at(const Vec3& eye, const Vec3& center, const Vec3& up)
+{
+    Vec3 f = normalize(center - eye);
+    Vec3 s = normalize(cross(f, normalize(up)));
+    Vec3 u = cross(s, f);
+
+    Mat4 rot(s[0], u[0], -f[0], 0,
+             s[1], u[1], -f[1], 0,
+             s[2], u[2], -f[2], 0,
+             0, 0, 0, 1);
+
+    Mat4 trans(1, 0, 0, 0,
+               0, 1, 0, 0,
+               0, 0, 1, 0,
+               -eye[0], -eye[1], -eye[2], 1);
+
+    return rot * trans;
+}
+
 } // namespace foundation

@@ -16,6 +16,7 @@ set(SCENE_HEADERS scene.h
                   material_node.h
                   material_except.h
                   compiler.h
+                  camera.h
                   bvh_node.h
                   bvh_builder.h
                   known_ior.h
@@ -25,6 +26,7 @@ set(SCENE_HEADERS scene.h
 set(SCENE_SOURCES obj_loader.cpp
                   material_node.cpp
                   compiler.cpp
+                  camera.cpp
                   known_ior.cpp
                   mat_expr.cpp
                   ${CMAKE_CURRENT_BINARY_DIR}/mat_expr_parser.cxx

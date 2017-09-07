@@ -160,4 +160,8 @@ inline Vec4 operator*(const Mat4& m, const Vec4& v)
 
 Mat4 inverse(const Mat4& m);
 
+Mat4 make_perspective(float fovy, float aspect, float near, float far);
+
+Mat4 make_look_at(const Vec3& eye, const Vec3& center, const Vec3& up);
+
 } // namespace eclipse

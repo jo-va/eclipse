@@ -13,8 +13,6 @@ public:
     inline Quaternion(const Quaternion& q) : v(q.v), w(q.w) { }
     inline Quaternion(const Vec3& v, float w) : v(v), w(w) { }
 
-    Quaternion inverse() const { return Quaternion(-v, w); }
-
     void to_matrix(Mat4& mat4) const;
 
     Vec3 v;
@@ -51,6 +49,31 @@ inline float dot(const Quaternion& q1, const Quaternion& q2)
 inline Quaternion normalize(const Quaternion& q)
 {
     return (1.0f / sqrt(dot(q, q))) * q;
+}
+
+inline float length(const Quaternion& q)
+{
+    return sqrt(dot(q, q));
+}
+
+inline Quaternion inverse(const Quaternion& q)
+{
+    float scaler = 1.0f / dot(q, q);
+    return Quaternion(-1.0f * scaler * q.v, scaler * q.w);
+}
+
+inline Vec3 rotate_vector(const Quaternion& q, const Vec3& v)
+{
+    Vec3 c = cross(q.v, v);
+    return v + c * (2.0f * q.w) + cross(2.0f * q.v, c);
+}
+
+inline Quaternion quat_from_axis_angle(const Vec3& axis, float angle)
+{
+    float s = (float)sin(double(angle * 0.5));
+    float c = (float)cos(double(angle * 0.5));
+
+    return Quaternion(axis * s, c);
 }
 
 } // namespace eclipse
