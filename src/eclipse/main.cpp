@@ -17,10 +17,14 @@ namespace {
     auto logger = Logger::create("main");
 }
 
+void show_banner()
+{
+    std::cout << "\nEclipse - Path tracing renderer\n" << std::endl;
+}
+
 void show_usage()
 {
-    std::cout << "Eclipse - Path tracing renderer\n\n"
-              << "usage: eclipse --help\n"
+    std::cout << "usage: eclipse --help\n"
               << "usage: eclipse --info scene.(obj|bin)\n"
               << "usage: eclipse --compile scene.obj\n"
               << "usage: eclipse --list-devices\n"
@@ -32,13 +36,14 @@ void show_usage()
               << "       --info         Print scene statistics\n"
               << "       --list-devices List the available rendering devices\n"
               << "       --compile      Compile scene to a compressed binary format\n"
-              << "       --render       Render a scene" << std::endl;
+              << "       --render       Render a scene\n" << std::endl;
 }
 
 int main(int argc, char** argv)
 {
     try
     {
+        show_banner();
         InputParser input(argc, argv);
 
         if (input.option_exists("--help") || argc == 1)
@@ -89,8 +94,8 @@ int main(int argc, char** argv)
         else if (input.option_exists("--render"))
         {
             render::Options options;
-            options.frame_width = 1024;
-            options.frame_height = 1024;
+            options.frame_width = 512;
+            options.frame_height = 512;
             options.samples_per_pixel = 0;
             options.num_bounces = 5;
             options.min_bounces_for_rr = 3;
@@ -131,7 +136,7 @@ int main(int argc, char** argv)
     }
     catch (std::exception& e)
     {
-        logger.log<ERROR>("Exception caught: ", e.what());
+        logger.log<ERROR>("Error: ", e.what());
     }
 
     return 0;

@@ -1,11 +1,10 @@
 set(RENDER_HEADERS options.h
+                   renderer.h
                    interactive_renderer.h
-                   default_font.h
-                   drawing.h
-                   gl_util.h
                    window.h)
 
-set(RENDER_SOURCES interactive_renderer.cpp
+set(RENDER_SOURCES renderer.cpp
+                   interactive_renderer.cpp
                    window.cpp)
 
 add_library(eclipse_render ${RENDER_SOURCES} ${RENDER_HEADERS})

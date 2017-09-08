@@ -83,11 +83,11 @@ std::string size_str(float size)
 {
     char buff[100] = { 0 };
     if (size < 1024)
-        std::snprintf(buff, sizeof(buff), "%3d bytes", (int)size);
+        std::snprintf(buff, sizeof(buff), "%3d B", (int)size);
     else if (size < 1024 * 1024)
-        std::snprintf(buff, sizeof(buff), "%3.1f kb", size / 1024);
+        std::snprintf(buff, sizeof(buff), "%3.1f kB", size / 1024);
     else
-        std::snprintf(buff, sizeof(buff), "%5.1f mb", size / (1024 * 1024));
+        std::snprintf(buff, sizeof(buff), "%5.1f MB", size / (1024 * 1024));
     return std::string(buff);
 }
 
