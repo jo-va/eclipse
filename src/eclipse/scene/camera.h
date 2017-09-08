@@ -25,6 +25,7 @@ struct Camera
     void update();
     void update_frustrum();
     void make_projection(float aspect);
+    void invert_y_axis(bool invert);
 };
 
 } } // namespace eclipse::scene

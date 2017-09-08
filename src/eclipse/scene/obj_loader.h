@@ -1,6 +1,9 @@
 #pragma once
 
+#include "eclipse/util/except.h"
+
 #include <memory>
+#include <string>
 
 namespace eclipse {
 
@@ -11,6 +14,12 @@ namespace raw {
 }
 
 namespace scene {
+
+class ObjError : public Error
+{
+public:
+    ObjError(const std::string& msg) : Error(msg) { }
+};
 
 std::unique_ptr<raw::Scene> load_obj(std::shared_ptr<Resource> scene);
 

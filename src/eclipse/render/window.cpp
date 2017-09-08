@@ -1,5 +1,5 @@
-#include "eclipse/renderer/window.h"
-#include "eclipse/renderer/gl_util.h"
+#include "eclipse/render/window.h"
+#include "eclipse/render/gl_util.h"
 
 #include <GL/glew.h>
 #include <GLFW/glfw3.h>

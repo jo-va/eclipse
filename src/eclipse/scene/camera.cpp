@@ -42,4 +42,9 @@ void Camera::update_frustrum()
 
 }
 
+void Camera::invert_y_axis(bool invert)
+{
+    invert_y = invert;
+}
+
 } } // namespace eclipse::scene

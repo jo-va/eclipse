@@ -44,19 +44,24 @@ struct Material
     bool used;
 
     std::string get_expression();
-
-    ~Material()
-    {
-        //logger.log<DEBUG>("obj::Material ", name, " deleted");
-    }
 };
+
+template <typename... Args>
+std::string fmt_error(const std::string& file, int line, Args const&... args)
+{
+    std::string s = "[" + file + ": " + std::to_string(line) + "] error: ";
+    std::ostringstream oss(s);
+    using List = int[];
+    (void)List{ 0, ((void)(oss << args), 0) ... };
+    return oss.str();
+}
 
 void parse(std::shared_ptr<Resource> res);
 
 std::vector<raw::Triangle> parse_face(const std::vector<std::string>& tokens, size_t vert_off, size_t norm_off, size_t uv_off);
 std::shared_ptr<raw::MeshInstance> parse_mesh_instance(const std::vector<std::string>& tokens);
 void create_default_mesh_instances();
-size_t select_coord_index(const std::string& index_token, size_t coord_list_size, size_t rel_offset);
+uint32_t select_coord_index(const std::string& index_token, size_t coord_list_size, size_t rel_offset);
 void verify_last_parsed_mesh();
 
 void parse_materials(std::shared_ptr<Resource> res);
@@ -92,6 +97,10 @@ size_t g_num_vertices;
 
 std::unique_ptr<raw::Scene> load_obj(std::shared_ptr<Resource> scene)
 {
+    StopWatch stopwatch;
+    stopwatch.start();
+    logger.log<INFO>("parsing scene from ", scene->get_path());
+
     g_mat_name_to_index_map.clear();
     g_materials.clear();
     g_vertices.clear();
@@ -104,11 +113,6 @@ std::unique_ptr<raw::Scene> load_obj(std::shared_ptr<Resource> scene)
     g_num_triangles = 0;
     g_num_vertices = 0;
     g_raw_scene = std::make_unique<raw::Scene>();
-
-    logger.log<INFO>("parsing scene from ", scene->get_path());
-
-    StopWatch stopwatch;
-    stopwatch.start();
 
     parse(scene);
 
@@ -254,6 +258,7 @@ void process_materials()
         if (!obj_mat->used)
         {
             logger.log<WARNING>("skipping unused material ", obj_mat->name);
+
             auto pruned_mat = std::make_shared<raw::Material>();
             pruned_mat->name = obj_mat->name;
             pruned_mat->expression = obj_mat->get_expression();
@@ -316,6 +321,7 @@ Material* default_material()
     return g_current_mat;
 }
 
+// Parse wavefront object scene format
 void parse(std::shared_ptr<Resource> res)
 {
     size_t rel_vertex_offset = g_vertices.size();
@@ -323,7 +329,7 @@ void parse(std::shared_ptr<Resource> res)
     size_t rel_uv_offset = g_uvs.size();
 
     std::istream& input_stream = res->get_stream();
-    std::vector<std::string> tokens(100);
+    std::vector<std::string> tokens(20);
 
     size_t line_num = 0;
     for (std::string line; std::getline(input_stream, line);)
@@ -331,7 +337,6 @@ void parse(std::shared_ptr<Resource> res)
         ++line_num;
         g_line_num = line_num;
         g_file = res->get_path().c_str();
-        //logger.log<DEBUG>("[", line_num, "]: ", line);
 
         // Tokenize line
         std::stringstream line_stream(line);
@@ -346,11 +351,11 @@ void parse(std::shared_ptr<Resource> res)
         if (tokens[0] == "call" || tokens[0] == "mtllib")
         {
             if (tokens.size() != 2)
-                logger.log<ERROR>(res->get_path(), ": ", line_num,
-                        " -> unsupported syntax for ", tokens[0],
-                        "; expected 1 argument; got ", tokens.size() - 1, get_call_stack());
+                throw ObjError(fmt_error(res->get_path(), line_num,
+                    "unsupported syntax for '", tokens[0],
+                    "'; expected 1 argument; got ", tokens.size() - 1, get_call_stack()));
 
-            push_call("Referenced from " + tokens[1] + ": " + std::to_string(line_num) + " [" + tokens[0] + "]");
+            push_call("referenced from '" + tokens[1] + "': " + std::to_string(line_num) + " [" + tokens[0] + "]");
 
             auto inner_res = std::make_shared<Resource>(tokens[1], res);
             if (tokens[0] == "call")
@@ -363,13 +368,13 @@ void parse(std::shared_ptr<Resource> res)
         else if (tokens[0] == "usemtl")
         {
             if (tokens.size() != 2)
-                logger.log<ERROR>(res->get_path(), ": ", line_num,
-                        " -> unsupported syntax for \"usemtl\" \
-                        ; expected 1 argument; got ", tokens.size() - 1, get_call_stack());
+                throw ObjError(fmt_error(res->get_path(), line_num,
+                    "unsupported syntax for 'usemtl';",
+                    "expected 1 argument; got ", tokens.size() - 1, get_call_stack()));
 
             if (g_mat_name_to_index_map.find(tokens[1]) == g_mat_name_to_index_map.end())
-                logger.log<ERROR>(res->get_path(), ": ", line_num,
-                        " -> undefined material with name ", tokens[1], get_call_stack());
+                throw ObjError(fmt_error(res->get_path(), line_num,
+                    "undefined material with name '", tokens[1], "'", get_call_stack()));
 
             size_t mat_index = g_mat_name_to_index_map[tokens[1]];
             g_current_mat = g_materials[mat_index];
@@ -390,8 +395,9 @@ void parse(std::shared_ptr<Resource> res)
         else if (tokens[0] == "g" || tokens[0] == "o")
         {
             if (tokens.size() < 2)
-                logger.log<ERROR>(res->get_path(), ": ", line_num, " -> unsupported syntax for ", tokens[0],
-                          "; expected 1 argument; got ", tokens.size() - 1);
+                throw ObjError(fmt_error(res->get_path(), line_num,
+                        "unsupported syntax for '", tokens[0],
+                        "'; expected 1 argument; got ", tokens.size() - 1, get_call_stack()));
 
             verify_last_parsed_mesh();
             g_raw_scene->meshes.push_back(std::make_shared<raw::Mesh>(tokens[1]));
@@ -401,9 +407,11 @@ void parse(std::shared_ptr<Resource> res)
             std::vector<raw::Triangle> triangles = parse_face(tokens, rel_vertex_offset, rel_normal_offset, rel_uv_offset);
             g_num_triangles += triangles.size();
 
+            // If no object has been defined, create a default one
             if (g_raw_scene->meshes.size() == 0)
                 g_raw_scene->meshes.push_back(std::make_shared<raw::Mesh>("default"));
 
+            // Append primitive
             size_t mesh_index = g_raw_scene->meshes.size() - 1;
             auto mesh = g_raw_scene->meshes[mesh_index];
             mesh->mark_bbox_dirty();
@@ -440,19 +448,20 @@ void verify_last_parsed_mesh()
     int last_mesh_index = g_raw_scene->meshes.size() - 1;
     if (last_mesh_index >= 0 && g_raw_scene->meshes[last_mesh_index]->triangles.size() == 0)
     {
-        logger.log<WARNING>("dropping mesh ", g_raw_scene->meshes[last_mesh_index]->name, " as it contains no polygons");
+        logger.log<WARNING>("dropping mesh '", g_raw_scene->meshes[last_mesh_index]->name,
+                "' as it contains no polygons");
 
-        //delete g_raw_scene->meshes[last_mesh_index];
         g_raw_scene->meshes.pop_back();
     }
 }
 
+// Parse a wavefront material library
 void parse_materials(std::shared_ptr<Resource> res)
 {
-    logger.log<INFO>("parsing material library ", res->get_path());
+    logger.log<INFO>("parsing material library '", res->get_path(), "'");
 
     std::istream& input_stream = res->get_stream();
-    std::vector<std::string> tokens(100);
+    std::vector<std::string> tokens(50);
 
     Material* current_mat = nullptr;
     std::string mat_name;
@@ -463,8 +472,6 @@ void parse_materials(std::shared_ptr<Resource> res)
         ++line_num;
         g_line_num = line_num;
         g_file = res->get_path().c_str();
-
-        //logger.log<DEBUG>("[", line_num, "]: ", line);
 
         // Tokenize line
         std::stringstream line_stream(line);
@@ -479,14 +486,14 @@ void parse_materials(std::shared_ptr<Resource> res)
         if (tokens[0] == "newmtl")
         {
             if (tokens.size() != 2)
-                logger.log<ERROR>(res->get_path(), ": ", line_num,
-                          " -> unsupported syntax for \"newmtl\"; \
-                          expected 1 argument; got ", tokens.size() - 1, get_call_stack());
+                throw ObjError(fmt_error(res->get_path(), line_num,
+                        "unsupported syntax for 'newmtl'; ",
+                        "expected 1 argument; got ", tokens.size() - 1, get_call_stack()));
 
             mat_name = tokens[1];
             if (g_mat_name_to_index_map.find(mat_name) != g_mat_name_to_index_map.end())
-                logger.log<ERROR>(res->get_path(), ": ", line_num,
-                          " -> material ", mat_name, " already defined", get_call_stack());
+                throw ObjError(fmt_error(res->get_path(), line_num,
+                        "material '", mat_name, "' already defined", get_call_stack()));
 
             Material* material = new Material();
             material->name = mat_name;
@@ -499,19 +506,20 @@ void parse_materials(std::shared_ptr<Resource> res)
         else
         {
             if (current_mat == nullptr)
-                logger.log<ERROR>(res->get_path(), ": ", line_num, " -> got ",
-                          tokens[0], " withoug a \"newmtl\"", get_call_stack());
+                throw ObjError(fmt_error(res->get_path(), line_num, "got '",
+                          tokens[0], "' withoug a 'newmtl'", get_call_stack()));
 
             if (tokens[0] == "include")
             {
                 if (tokens.size() < 2)
-                    logger.log<ERROR>(res->get_path(), ": ", line_num,
-                             " -> unsupported syntax for \"include\"; expected 1 argument; \
-                             got ", tokens.size() - 1, get_call_stack());
+                    throw ObjError(fmt_error(res->get_path(), line_num,
+                            "unsupported syntax for 'include'; expected 1 argument; ",
+                            "got ", tokens.size() - 1, get_call_stack()));
 
                 auto it = g_mat_name_to_index_map.find(tokens[1]);
                 if (it == g_mat_name_to_index_map.end())
-                    logger.log<ERROR>();
+                    throw ObjError(fmt_error(res->get_path(), line_num, "could not ",
+                            "include unknown material '", tokens[1], get_call_stack()));
 
                 *current_mat = *g_materials[it->second];
                 current_mat->name = mat_name;
@@ -563,8 +571,8 @@ void parse_materials(std::shared_ptr<Resource> res)
             else if (tokens[0] == "mat_expr")
             {
                 if (tokens.size() < 2)
-                    logger.log<ERROR>(res->get_path(), ": ", line_num, " -> unsupported syntax for ",
-                            "\"mat_expr\"; expected 1 argument; got ", tokens.size() - 1, get_call_stack());
+                    throw ObjError(fmt_error(res->get_path(), line_num, "unsupported syntax for ",
+                            "'mat_expr'; expected 1 argument; got ", tokens.size() - 1, get_call_stack()));
 
                 for (size_t i = 1; i < tokens.size() - 1; ++i)
                     current_mat->expression += tokens[i] + " ";
@@ -573,8 +581,8 @@ void parse_materials(std::shared_ptr<Resource> res)
             else if (tokens[0] == "KeScaler")
             {
                 if (tokens.size() < 2)
-                    logger.log<ERROR>(res->get_path(), ": ", line_num, " -> unsupported syntax for ",
-                              "\"KeScaler\"; expected 1 argument; got ", tokens.size() - 1, get_call_stack());
+                    throw ObjError(fmt_error(res->get_path(), line_num, "unsupported syntax for ",
+                              "'KeScaler'; expected 1 argument; got ", tokens.size() - 1, get_call_stack()));
 
                 current_mat->Ke_scaler = parse_float(tokens);
             }
@@ -582,6 +590,20 @@ void parse_materials(std::shared_ptr<Resource> res)
     }
 }
 
+// Parse face definition. Each face definitions consists of 3 arguments,
+// one for each vertex. Each one of the vertex arguments is comprised of
+// 1, 2 or 3 args separated by a slash character. The following formats are
+// supported:
+//     vertex_index
+//     vertex_index/uv_index
+//     vertex_index//normal_index
+//     vertex_index/uv_index/normal_index
+//
+// Indices start from 1 and may be negative to indicate
+// an offset off the end of the vertex/uv list
+//
+// This method only works with triangular/quad faces and will return an error if a
+// face with more than 4 vertices is encountered.
 std::vector<raw::Triangle> parse_face(const std::vector<std::string>& tokens,
                                       size_t rel_vertex_offset,
                                       size_t rel_normal_offset,
@@ -589,12 +611,10 @@ std::vector<raw::Triangle> parse_face(const std::vector<std::string>& tokens,
 {
     std::vector<raw::Triangle> triangles;
     if (tokens.size() < 4 || tokens.size() > 5)
-    {
-        logger.log<ERROR>(g_file, ": ", g_line_num, " -> unsupported syntax for \"f\"; expected 3 arguments \
-                  for triangular faces or 4 arguments for a quad face; got ", tokens.size() - 1,
-                  "Select the triangulation option in your exporter");
-        return triangles;
-    }
+        throw ObjError(fmt_error(g_file, g_line_num, "unsupported syntax for ",
+                "'f'; expected 3 arguments for triangular faces or 4 arguments for a ",
+                "quad face; got ", tokens.size() - 1,
+                ". Select the triangulation option in your exporter", get_call_stack()));
 
     Vec3 vertices[4];
     Vec3 normals[4];
@@ -604,10 +624,6 @@ std::vector<raw::Triangle> parse_face(const std::vector<std::string>& tokens,
 
     for (size_t arg = 0; arg < tokens.size() - 1; ++arg)
     {
-        // Tokenize the line arg1/arg2/arg3
-        //                   arg1//arg3
-        //                   arg1/arg2
-        //                   arg1
         std::vector<std::string> face_tokens;
         const char* c = tokens[arg + 1].c_str();
         std::string token;
@@ -634,25 +650,29 @@ std::vector<raw::Triangle> parse_face(const std::vector<std::string>& tokens,
         }
         else if (face_tokens.size() != exp_indices)
         {
-            logger.log<ERROR>(g_file, ": ", g_line_num, " -> expected each face argument to contain ",
-                      exp_indices, "indices; arg ", arg, " contains ", face_tokens.size(), " indices");
-            return triangles;
+            throw ObjError(fmt_error(g_file, g_line_num, "expected each face argument ",
+                    "to contain ", exp_indices, " indices; arg ", arg, " contains ",
+                    face_tokens.size(), " indices", get_call_stack()));
         }
 
         // Faces must at least define a vertex coord
         if (face_tokens[0].empty())
-        {
-            logger.log<ERROR>(g_file, ": ", g_line_num, " -> face argument ", arg, " does not include a vertex index");
-            return triangles;
-        }
+            throw ObjError(fmt_error(g_file, g_line_num, "face argument ", arg,
+                    " does not include a vertex index", get_call_stack()));
 
-        int offset = select_coord_index(face_tokens[0], g_vertices.size(), rel_vertex_offset);
+        uint32_t offset = select_coord_index(face_tokens[0], g_vertices.size(), rel_vertex_offset);
+        if (offset == (uint32_t)pos_inf)
+            throw ObjError(fmt_error(g_file, g_line_num, "could not parse vertex coord ",
+                    "for face argument ", arg, ": index out of bounds", get_call_stack()));
         vertices[arg] = g_vertices[offset];
 
         // Parse uv coords if specified
         if (exp_indices > 1 && !face_tokens[1].empty())
         {
             offset = select_coord_index(face_tokens[1], g_uvs.size(), rel_uv_offset);
+            if (offset == (uint32_t)pos_inf)
+                throw ObjError(fmt_error(g_file, g_line_num, "could not parse tex coord ",
+                    "for face argument ", arg, ": index out of bounds", get_call_stack()));
             uvs[arg] = g_uvs[offset];
         }
 
@@ -660,6 +680,9 @@ std::vector<raw::Triangle> parse_face(const std::vector<std::string>& tokens,
         if (exp_indices > 2 && !face_tokens[2].empty())
         {
             offset = select_coord_index(face_tokens[2], g_normals.size(), rel_normal_offset);
+            if (offset == (uint32_t)pos_inf)
+                throw ObjError(fmt_error(g_file, g_line_num, "could not parse normal coord ",
+                    "for face argument ", arg, ": index out of bounds", get_call_stack()));
             normals[arg] = g_normals[offset];
             has_normals = true;
         }
@@ -712,7 +735,11 @@ std::vector<raw::Triangle> parse_face(const std::vector<std::string>& tokens,
     return triangles;
 }
 
-size_t select_coord_index(const std::string& index_token, size_t coord_list_size, size_t rel_offset)
+// Given an index for a face coord type (vertex, normal, tex) calculate the
+// proper offset into the coord list. wavefront format can also use negative
+// indices to reference elements from the end of the coord list.
+// An error is signaled by returing positive infinite as the return value.
+uint32_t select_coord_index(const std::string& index_token, size_t coord_list_size, size_t rel_offset)
 {
     int index = std::stoi(index_token);
 
@@ -724,20 +751,25 @@ size_t select_coord_index(const std::string& index_token, size_t coord_list_size
 
     if (offset < 0 || size_t(offset) >= coord_list_size)
     {
-        logger.log<ERROR>(g_file, ": ", g_line_num, " -> index out of bounds");
+        // signal error
+        return pos_inf;
     }
 
     return offset;
 }
 
+// Parse mesh instance definition. Definitions use the following format:
+// instance mesh_name tX tY tZ yaw pitch roll sX sY sZ
+// where:
+// tX, tY, tZ       : translation vector
+// yaw, pitch, roll : rotation angles in degrees
+// sX, sY, sZ       : scale
 std::shared_ptr<raw::MeshInstance> parse_mesh_instance(const std::vector<std::string>& tokens)
 {
     if (tokens.size() != 11)
-    {
-        logger.log<ERROR>(g_file, ": ", g_line_num, " -> unsupported syntax for \"instance\";\
-                  expected 10 arguments: mesh_name tX tY tZ yaw pitch roll scaleX scaleY scaleZ; got ", tokens.size() - 1);
-        return nullptr;;
-    }
+        throw ObjError(fmt_error(g_file, g_line_num, "unsupported syntax for ",
+                "'instance'; expected 10 arguments: mesh_name tX tY tZ yaw pitch roll ",
+                "scaleX scaleY scaleZ; got ", tokens.size() - 1, get_call_stack()));
 
     // Find object by name
     std::string mesh_name = tokens[1];
@@ -752,10 +784,8 @@ std::shared_ptr<raw::MeshInstance> parse_mesh_instance(const std::vector<std::st
         }
     }
     if (mesh_index == -1)
-    {
-        logger.log<ERROR>(g_file, ": ", g_line_num, " -> unknown mesh with name ", mesh_name);
-        return nullptr;
-    }
+        throw ObjError(fmt_error(g_file, g_line_num, "unknown mesh with name '",
+                mesh_name, "'", get_call_stack()));
 
     Vec3 translation;
     Vec3 rotation;
@@ -795,12 +825,9 @@ std::shared_ptr<raw::MeshInstance> parse_mesh_instance(const std::vector<std::st
 float parse_float(const std::vector<std::string>& tokens)
 {
     if (tokens.size() < 2)
-    {
-        logger.log<ERROR>(g_file, ": ", g_line_num,
-                  " -> unsupported syntax for ", tokens[0],
-                  "; expected 1 arguments; got ", tokens.size() - 1, get_call_stack());
-        return 0.0f;
-    }
+        throw ObjError(fmt_error(g_file, g_line_num,
+                  "unsupported syntax for '", tokens[0],
+                  "'; expected 1 arguments; got ", tokens.size() - 1, get_call_stack()));
 
     return std::stof(tokens[1]);
 }
@@ -808,12 +835,9 @@ float parse_float(const std::vector<std::string>& tokens)
 Vec2 parse_vec2(const std::vector<std::string>& tokens)
 {
     if (tokens.size() < 3)
-    {
-        logger.log<ERROR>(g_file, ": ", g_line_num,
-                  " -> Unsupported syntax for ", tokens[0],
-                  "; expected 2 arguments; got ", tokens.size() - 1, get_call_stack());
-        return Vec2();
-    }
+        throw ObjError(fmt_error(g_file, g_line_num,
+                  "unsupported syntax for '", tokens[0],
+                  "'; expected 2 arguments; got ", tokens.size() - 1, get_call_stack()));
 
     return Vec2(std::stof(tokens[1]), std::stof(tokens[2]));
 }
@@ -821,12 +845,9 @@ Vec2 parse_vec2(const std::vector<std::string>& tokens)
 Vec3 parse_vec3(const std::vector<std::string>& tokens)
 {
     if (tokens.size() < 4)
-    {
-        logger.log<ERROR>(g_file, ": ", g_line_num,
-                  " -> Unsupported syntax for ", tokens[0],
-                  "; expected 3 arguments; got ", tokens.size() - 1, get_call_stack());
-        return Vec3();
-    }
+        throw ObjError(fmt_error(g_file, g_line_num,
+                  "unsupported syntax for '", tokens[0],
+                  "'; expected 3 arguments; got ", tokens.size() - 1, get_call_stack()));
 
     return Vec3(std::stof(tokens[1]), std::stof(tokens[2]), std::stof(tokens[3]));
 }
